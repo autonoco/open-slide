@@ -100,6 +100,7 @@ export async function createViteConfig(opts: CreateViteConfigOptions): Promise<I
         'react',
         'react-dom',
         'react-dom/client',
+        '@open-slide/core',
         'next-themes',
         'react-router-dom',
         '@base-ui/react',
