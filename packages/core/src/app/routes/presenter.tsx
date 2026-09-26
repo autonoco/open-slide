@@ -21,8 +21,10 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { hasModifier, isBackwardKey, isForwardKey, isTypingTarget } from '@/lib/keys';
+import { useDocumentTitle } from '@/lib/use-document-title';
 import { format, useLocale } from '@/lib/use-locale';
 import { cn, pad2 } from '@/lib/utils';
+import { NoteMarkdown } from '../components/note-markdown';
 import {
   type PresenterState,
   usePresenterChannel,
@@ -38,6 +40,7 @@ import { useSlideModule } from '../lib/use-slide-module';
 export function Presenter() {
   const { slideId = '' } = useParams();
   const { slide, error } = useSlideModule(slideId);
+  useDocumentTitle(slide?.meta?.title);
 
   // Presenter view is a passive mirror of the projection window. It only
   // tracks the index it last heard about; navigation buttons send commands
@@ -589,11 +592,11 @@ function SpeakerNotes({ note }: { note: string | undefined }) {
         </div>
       </div>
       <div
-        className="min-h-0 flex-1 overflow-y-auto rounded-[6px] border border-border bg-card p-3 leading-relaxed whitespace-pre-wrap text-card-foreground"
+        className="min-h-0 flex-1 overflow-y-auto rounded-[6px] border border-border bg-card p-3 leading-relaxed text-card-foreground"
         style={{ fontSize: NOTES_FONT_SIZES[sizeIndex] }}
       >
         {note?.trim() ? (
-          note
+          <NoteMarkdown text={note} />
         ) : (
           <span className="text-muted-foreground">
             {t.presenter.noNotesPrefix}

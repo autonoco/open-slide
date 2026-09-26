@@ -1,6 +1,7 @@
 'use client';
 
 import { type KeyboardEvent, useEffect, useRef, useState } from 'react';
+import { DemoPageContext } from './demo-page-context';
 import demoSlides from './demo-slide';
 
 const CANVAS_W = 1920;
@@ -59,6 +60,9 @@ export function InlineSlidePlayer({ index, onIndexChange }: Props) {
   return (
     <div
       ref={rootRef}
+      role="group"
+      // biome-ignore lint/a11y/noNoninteractiveTabindex: the player owns arrow-key navigation, so it must be reachable by keyboard
+      tabIndex={0}
       onKeyDown={onKeyDown}
       aria-roledescription="slide player"
       aria-label={`Slide ${index + 1} of ${count}`}
@@ -66,7 +70,7 @@ export function InlineSlidePlayer({ index, onIndexChange }: Props) {
     >
       <div ref={stageRef} className="relative h-full w-full overflow-hidden">
         <div
-          className="overflow-hidden bg-black"
+          className="overflow-hidden bg-white"
           style={{
             width: scaledW,
             height: scaledH,
@@ -84,16 +88,11 @@ export function InlineSlidePlayer({ index, onIndexChange }: Props) {
               transformOrigin: 'top left',
             }}
           >
-            {Page ? <Page /> : null}
+            <DemoPageContext.Provider value={{ index, total: count }}>
+              {Page ? <Page /> : null}
+            </DemoPageContext.Provider>
           </div>
         </div>
-      </div>
-
-      <div
-        aria-hidden
-        className="pointer-events-none absolute bottom-3 right-3 font-[family-name:var(--font-mono)] text-[11px] tracking-[0.08em] text-[color:var(--color-muted)] bg-[color:var(--color-panel)]/75 backdrop-blur-sm px-2 py-1 rounded-[4px]"
-      >
-        {String(index + 1).padStart(2, '0')} / {String(count).padStart(2, '0')}
       </div>
     </div>
   );

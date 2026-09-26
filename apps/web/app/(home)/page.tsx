@@ -1,22 +1,16 @@
-import { Agents } from '@/components/landing/agents';
-import { Anatomy } from '@/components/landing/anatomy';
-import { Assets } from '@/components/landing/assets';
 import { FAQ, faqs } from '@/components/landing/faq';
+import { Features } from '@/components/landing/features';
 import { Footer } from '@/components/landing/footer';
-import { StripeBand } from '@/components/landing/frame';
 import { GetStarted } from '@/components/landing/get-started';
 import { Hero } from '@/components/landing/hero';
 import { HowItWorks } from '@/components/landing/how-it-works';
-import { Inspector } from '@/components/landing/inspector';
-import { LiveDemo } from '@/components/landing/live-demo';
 import { Nav } from '@/components/landing/nav';
-import { PromptComposer } from '@/components/landing/prompt-composer';
 import { ScrollReveal } from '@/components/landing/scroll-reveal';
 import { UsedBy } from '@/components/landing/used-by';
 import { fetchGitHubStars, formatStarCount } from '@/lib/github';
 import { appName, gitConfig, siteUrl } from '@/lib/shared';
 
-const repoUrl = `https://github.com/${gitConfig.user}/${gitConfig.repo}`;
+const repoUrl = `https://github.com/${gitConfig.owner}/${gitConfig.repo}`;
 const description =
   'A React-first slide framework authored by AI agents. Each page is arbitrary code on a 1920×1080 canvas — versioned, reviewable, yours.';
 
@@ -124,17 +118,10 @@ export default async function HomePage() {
       <ScrollReveal />
       <main className="relative flex-1">
         <Hero />
-        <LiveDemo />
-        <PromptComposer />
-        <StripeBand />
         <HowItWorks />
-        <Anatomy />
-        <Inspector />
-        <Assets />
-        <Agents />
+        <Features />
         <UsedBy />
         <FAQ />
-        <StripeBand />
         <GetStarted />
       </main>
       <Footer />
