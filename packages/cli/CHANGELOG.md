@@ -1,5 +1,11 @@
 # @open-slide/cli
 
+## 2.0.1
+
+### Patch Changes
+
+- [`8f8ed7d`](https://github.com/open-slide/open-slide/commit/8f8ed7dd060ae14695ee35445a6447a729fd5170) Thanks [@bobakemamian](https://github.com/bobakemamian)! - Use Autono branding in the starter deck.
+
 ## 2.0.0
 
 ### Major Changes

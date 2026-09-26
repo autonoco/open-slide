@@ -1,5 +1,13 @@
 # @open-slide/core
 
+## 2.0.1
+
+### Patch Changes
+
+- [`571fa2a`](https://github.com/open-slide/open-slide/commit/571fa2a7dd626750e34e329dca5bc1d3bae695ab) Thanks [@bobakemamian](https://github.com/bobakemamian)! - Use Autono branding throughout the slide app.
+
+- [`074020f`](https://github.com/open-slide/open-slide/commit/074020f84492211f5e54a15e517bffd6312a34a7) Thanks [@bobakemamian](https://github.com/bobakemamian)! - Remove the language switcher and align static build checks with Autono branding.
+
 ## 2.0.0
 
 ### Major Changes
