@@ -136,7 +136,7 @@ export function logoMark({ size = 160, tile = true, glow = true } = {}) {
 
 export function logoImg(size = 24, radius = 6) {
   return h('img', {
-    src: '/@repo/apps/web/public/open-slide.png',
+    src: '/@repo/apps/web/public/autono.svg',
     width: size,
     height: size,
     style: `display:block;width:${size}px;height:${size}px;border-radius:${radius}px;box-shadow:0 0 0 1px rgb(0 0 0 / 0.08)`,

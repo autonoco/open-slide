@@ -26,7 +26,7 @@ export const faqs: QA[] = [
   },
   {
     q: 'Is Autono open source?',
-    a: 'Yes. This Autono slide app is MIT-licensed. The runtime ships as @open-slide/core on npm and the scaffolder as @open-slide/cli. Source lives at github.com/autonoco/Autono.',
+    a: 'Yes. This Autono slide app is MIT-licensed. The runtime ships as @open-slide/core on npm and the scaffolder as @open-slide/cli. Source lives at github.com/autonoco/open-slide.',
   },
 ];
 

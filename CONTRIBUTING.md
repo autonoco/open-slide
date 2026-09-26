@@ -33,7 +33,7 @@ pnpm + Turbo monorepo.
 ## Getting set up
 
 ```bash
-git clone https://github.com/open-slide/open-slide.git
+git clone https://github.com/autonoco/open-slide.git
 cd open-slide
 pnpm install
 ```
