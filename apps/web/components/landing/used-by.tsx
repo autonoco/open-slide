@@ -1,7 +1,7 @@
 'use client';
 
-import { type CSSProperties, useState } from 'react';
-import { SectionRule } from './frame';
+import { useState } from 'react';
+import { Container, SectionHeading } from './frame';
 
 const tweetUrl = 'https://x.com/samlambert/status/2066020380092051484?s=20';
 const videoId = 'zxvyO5vnknI';
@@ -30,37 +30,27 @@ const thread: Tweet[] = [
 
 export function UsedBy() {
   return (
-    <section id="used-by" className="relative">
-      <SectionRule />
-      <div className="mx-auto max-w-[1360px] px-5 sm:px-8 lg:px-12 py-20 sm:py-32 lg:py-40">
-        <h2
-          data-reveal="blur"
-          className="text-[32px] sm:text-[44px] lg:text-[60px] leading-[1.1] sm:leading-[1.05] tracking-[-0.035em] font-medium max-w-[820px] mb-14 sm:mb-20"
-        >
-          Used by people
-          <br />
-          <span className="font-[family-name:var(--font-pixel)] text-[color:var(--color-muted)]">
-            who create engaging slides.
-          </span>
-        </h2>
+    <section id="used-by">
+      <Container className="pb-24 sm:pb-32">
+        <SectionHeading eyebrow="In the wild" title="Used by people who create engaging slides." />
 
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 lg:gap-12 items-start">
+        <div className="grid grid-cols-1 items-start gap-4 lg:grid-cols-5">
           <a
             data-reveal
             href={tweetUrl}
             target="_blank"
             rel="noopener noreferrer"
-            className="floating group relative block rounded-[10px] border border-[color:var(--color-rule)] bg-[color:var(--color-panel)] p-6 sm:p-7 transition-[border-color,box-shadow] duration-300 hover:border-[color:var(--color-dim)]"
+            className="group relative block rounded-2xl border border-[color:var(--color-rule)] bg-[color:var(--color-panel)] p-6 transition-colors duration-300 hover:border-[color:var(--color-dim)] sm:p-8 lg:col-span-2"
           >
-            <XGlyph className="absolute right-6 top-6 sm:right-7 sm:top-7 size-4 text-[color:var(--color-dim)] transition-colors group-hover:text-[color:var(--color-text)]" />
+            <XGlyph className="absolute right-6 top-6 size-4 text-[color:var(--color-dim)] transition-colors group-hover:text-[color:var(--color-text)] sm:right-7 sm:top-7" />
 
             <div className="relative flex flex-col">
               <span
                 aria-hidden
-                className="absolute left-5 top-5 bottom-5 w-px -translate-x-1/2 bg-[color:var(--color-rule)]"
+                className="absolute bottom-5 left-5 top-5 w-px -translate-x-1/2 bg-[color:var(--color-rule)]"
               />
               {thread.map((t) => (
-                <div key={t.handle} className="relative flex gap-3 pb-5 last:pb-0">
+                <div key={t.handle} className="relative flex gap-3.5 pb-6 last:pb-0">
                   <img
                     src={t.avatar}
                     alt=""
@@ -75,7 +65,7 @@ export function UsedBy() {
                         {t.handle}
                       </span>
                     </div>
-                    <p className="text-[16px] leading-[1.5] text-[color:var(--color-text-soft)]">
+                    <p className="text-[17px] leading-[1.5] text-[color:var(--color-text-soft)]">
                       {t.body}
                     </p>
                   </div>
@@ -86,8 +76,7 @@ export function UsedBy() {
 
           <figure
             data-reveal
-            style={{ '--reveal-delay': '120ms' } as CSSProperties}
-            className="floating m-0 overflow-hidden rounded-[10px] border border-[color:var(--color-rule)] bg-[color:var(--color-panel)]"
+            className="m-0 overflow-hidden rounded-2xl border border-[color:var(--color-rule)] bg-[color:var(--color-panel)] lg:col-span-3"
           >
             <VideoPlayer />
             <figcaption className="flex items-center gap-3.5 border-t border-[color:var(--color-rule-soft)] px-6 py-5">
@@ -121,7 +110,7 @@ export function UsedBy() {
             </figcaption>
           </figure>
         </div>
-      </div>
+      </Container>
     </section>
   );
 }
@@ -162,7 +151,7 @@ function VideoPlayer() {
       />
       <span
         aria-hidden
-        className="absolute left-1/2 top-1/2 flex size-14 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full bg-white/95 text-black shadow-[0_4px_20px_-2px_rgba(0,0,0,0.4)] backdrop-blur transition-transform duration-300 ease-[cubic-bezier(0.23,1,0.32,1)] group-active/play:scale-95"
+        className="absolute left-1/2 top-1/2 flex size-14 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full bg-white/95 text-black shadow-[0_4px_20px_-2px_rgba(0,0,0,0.4)] backdrop-blur transition-transform duration-300 ease-[cubic-bezier(0.23,1,0.32,1)] group-hover/play:scale-[1.06] group-active/play:scale-95"
       >
         <svg viewBox="0 0 24 24" fill="currentColor" className="size-6 translate-x-[1px]">
           <path d="M6 4.5 20 12 6 19.5 Z" />

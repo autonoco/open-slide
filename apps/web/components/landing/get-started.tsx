@@ -1,53 +1,33 @@
-import Link from 'next/link';
-import type { CSSProperties } from 'react';
+import { ButtonLink } from './button';
 import { CopyCommand } from './copy-command';
+import { Container } from './frame';
 
 export function GetStarted() {
   return (
-    <section id="install" className="relative overflow-hidden">
-      <div aria-hidden className="bloom absolute inset-0" />
-      <div className="relative mx-auto max-w-[1360px] px-5 sm:px-8 lg:px-12 py-24 sm:py-36 lg:py-48">
-        <div className="flex flex-col gap-10 sm:gap-14 max-w-[820px]">
-          <h2
-            data-reveal="blur"
-            className="text-sheen text-[36px] sm:text-[52px] lg:text-[76px] leading-[1.05] sm:leading-[1.0] tracking-[-0.04em] font-medium"
-          >
-            Author a deck
-            <br />
-            <span className="font-[family-name:var(--font-pixel)] accent-fill text-[color:var(--color-accent)]">
-              in the next minute.
-            </span>
-          </h2>
+    <section id="install">
+      <Container className="pb-24 sm:pb-32">
+        <div
+          data-reveal
+          className="flex flex-col items-center gap-8 rounded-[24px] border border-[color:var(--color-rule-soft)] bg-[color:var(--color-panel-hi)] px-6 py-20 text-center sm:py-28"
+        >
+          <div className="flex flex-col items-center gap-4">
+            <h2 className="text-balance text-[32px] font-medium leading-[1.08] tracking-[-0.03em] text-[color:var(--color-text)] sm:text-[44px] lg:text-[52px]">
+              Author a deck in the next minute.
+            </h2>
+            <p className="max-w-[46ch] text-pretty text-[16px] leading-[1.6] text-[color:var(--color-text-soft)] sm:text-[17px]">
+              One command, zero config. Free and open source under the MIT license. Your agent takes
+              it from here.
+            </p>
+          </div>
 
-          <p
-            data-reveal
-            style={{ '--reveal-delay': '100ms' } as CSSProperties}
-            className="max-w-[560px] text-[18px] leading-[1.65] text-[color:var(--color-text-soft)]"
-          >
-            One command, zero config. Your agent takes it from here.
-          </p>
-
-          <div
-            data-reveal
-            style={{ '--reveal-delay': '180ms' } as CSSProperties}
-            className="flex flex-wrap items-center gap-4"
-          >
-            <CopyCommand command="npx @open-slide/cli init" />
-            <Link
-              href="/docs"
-              className="group inline-flex h-[48px] sm:h-[52px] items-center gap-2 px-2 text-[14px] font-medium text-[color:var(--color-muted)] transition-colors hover:text-[color:var(--color-text)]"
-            >
+          <div className="flex flex-col items-center gap-3 sm:flex-row">
+            <ButtonLink href="/docs" size="lg">
               Read the docs
-              <span
-                aria-hidden
-                className="transition-transform duration-200 group-hover:translate-x-0.5"
-              >
-                →
-              </span>
-            </Link>
+            </ButtonLink>
+            <CopyCommand command="npx @open-slide/cli init" location="footer-cta" size="lg" />
           </div>
         </div>
-      </div>
+      </Container>
     </section>
   );
 }
