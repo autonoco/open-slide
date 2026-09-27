@@ -46,6 +46,7 @@ export function Footer() {
             ['GitHub', 'https://github.com/autonoco/open-slide'],
             ['npm', 'https://www.npmjs.com/package/@open-slide/core'],
             ['Issues', 'https://github.com/autonoco/open-slide/issues'],
+            ['Support open-slide', 'https://buymeacoffee.com/1weiho'],
           ]}
         />
       </Container>
