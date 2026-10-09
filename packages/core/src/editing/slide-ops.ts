@@ -4,6 +4,37 @@ import { parse as babelParse } from '@babel/parser';
 
 export const SLIDE_ID_RE = /^[a-z0-9_-]+$/i;
 
+/**
+ * True when a directory under root already uses this id, including a
+ * different case. ext4 keeps `Cover` and `cover` as two folders; macOS
+ * and Windows usually collapse them. Listing names catches both.
+ */
+async function slideIdTaken(root: string, slideId: string): Promise<boolean> {
+  let names: string[];
+  try {
+    names = await fs.readdir(root);
+  } catch {
+    return false;
+  }
+  const want = slideId.toLowerCase();
+  return names.some((name) => name.toLowerCase() === want);
+}
+
+const slidesRootQueues = new Map<string, Promise<unknown>>();
+
+// The id check and the copy must not interleave across requests: two copies
+// could otherwise claim the same id, or ids that differ only by case.
+function withSlidesRootLock<T>(root: string, fn: () => Promise<T>): Promise<T> {
+  const previous = slidesRootQueues.get(root) ?? Promise.resolve();
+  const run = previous.then(fn, fn);
+  const settled = run.catch(() => {});
+  slidesRootQueues.set(root, settled);
+  void settled.then(() => {
+    if (slidesRootQueues.get(root) === settled) slidesRootQueues.delete(root);
+  });
+  return run;
+}
+
 type MetaTitleRead =
   | { kind: 'found'; title: string }
   | { kind: 'missing' }
@@ -99,14 +130,24 @@ export async function rmSlideDir(slidesRoot: string, slideId: string): Promise<b
   }
 }
 
-export async function duplicateSlideDir(
+type DuplicateResult = { ok: true; slideId: string } | { ok: false; status: number; error: string };
+
+export function duplicateSlideDir(
   slidesRoot: string,
   slideId: string,
   desiredId?: string,
-): Promise<{ ok: true; slideId: string } | { ok: false; status: number; error: string }> {
+): Promise<DuplicateResult> {
+  const root = path.resolve(slidesRoot);
+  return withSlidesRootLock(root, () => duplicateSlideDirLocked(root, slideId, desiredId));
+}
+
+async function duplicateSlideDirLocked(
+  root: string,
+  slideId: string,
+  desiredId?: string,
+): Promise<DuplicateResult> {
   if (!SLIDE_ID_RE.test(slideId)) return { ok: false, status: 400, error: 'invalid slideId' };
 
-  const root = path.resolve(slidesRoot);
   const srcDir = path.resolve(root, slideId);
   if (!srcDir.startsWith(root + path.sep)) {
     return { ok: false, status: 400, error: 'invalid slideId' };
@@ -126,20 +167,18 @@ export async function duplicateSlideDir(
     if (!dstDir.startsWith(root + path.sep)) {
       return { ok: false, status: 400, error: 'invalid newId' };
     }
-    try {
-      await fs.access(dstDir);
+    if (await slideIdTaken(root, newId)) {
       return { ok: false, status: 409, error: 'slide already exists' };
-    } catch {}
+    }
   } else {
     let suffix = 1;
     while (true) {
       newId = suffix === 1 ? `${slideId}-copy` : `${slideId}-copy-${suffix}`;
-      try {
-        await fs.access(path.resolve(root, newId));
+      if (await slideIdTaken(root, newId)) {
         suffix++;
-      } catch {
-        break;
+        continue;
       }
+      break;
     }
   }
 

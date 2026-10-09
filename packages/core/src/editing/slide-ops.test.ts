@@ -62,9 +62,67 @@ describe('duplicateSlideDir', () => {
     });
   });
 
+  it('gives concurrent automatic copies distinct ids', async () => {
+    await withSlidesRoot(async (root) => {
+      await writeSlide(root, 'cover');
+
+      const results = await Promise.all([
+        duplicateSlideDir(root, 'cover'),
+        duplicateSlideDir(root, 'cover'),
+      ]);
+      expect(results).toEqual([
+        { ok: true, slideId: 'cover-copy' },
+        { ok: true, slideId: 'cover-copy-2' },
+      ]);
+    });
+  });
+
+  it('lets only one of two concurrent case-equivalent desired ids win', async () => {
+    await withSlidesRoot(async (root) => {
+      await writeSlide(root, 'cover');
+
+      const results = await Promise.all([
+        duplicateSlideDir(root, 'cover', 'Target'),
+        duplicateSlideDir(root, 'cover', 'target'),
+      ]);
+      expect(results).toEqual([
+        { ok: true, slideId: 'Target' },
+        { ok: false, status: 409, error: 'slide already exists' },
+      ]);
+      expect((await fs.readdir(root)).sort()).toEqual(['Target', 'cover']);
+    });
+  });
+
   it('rejects source slide ids with bad characters', async () => {
     await withSlidesRoot(async (root) => {
       expect(await duplicateSlideDir(root, 'bad id')).toMatchObject({ ok: false, status: 400 });
+    });
+  });
+
+  it('rejects a desired id that differs only by case', async () => {
+    await withSlidesRoot(async (root) => {
+      await writeSlide(root, 'cover');
+
+      expect(await duplicateSlideDir(root, 'cover', 'Cover')).toMatchObject({
+        ok: false,
+        status: 409,
+      });
+      expect(await fs.readdir(root)).toEqual(['cover']);
+    });
+  });
+
+  it('skips an automatic copy id that differs only by case', async () => {
+    await withSlidesRoot(async (root) => {
+      await writeSlide(root, 'Cover');
+      await writeSlide(root, 'cover-copy');
+
+      expect(await duplicateSlideDir(root, 'Cover')).toEqual({
+        ok: true,
+        slideId: 'Cover-copy-2',
+      });
+      const names = await fs.readdir(root);
+      expect(names.filter((name) => name.toLowerCase() === 'cover-copy')).toEqual(['cover-copy']);
+      expect(names).toContain('Cover-copy-2');
     });
   });
 
