@@ -168,7 +168,7 @@ test.describe('responsive slide toolbar', () => {
 
     for (let repeat = 0; repeat < 2; repeat++) {
       await page.getByRole('button', { name: 'Present options', exact: true }).click();
-      await expect(page.getByRole('menu')).toBeFocused();
+      await expect(page.getByRole('menu', { name: 'Present options' })).toBeFocused();
       await expect(page.getByRole('menuitem', { name: /^Play/ })).toBeVisible();
       await expect(page.getByRole('menuitem', { name: /^Fullscreen/ })).toBeVisible();
       await expect(page.getByRole('menuitem', { name: /^Presenter mode/ })).toBeVisible();
