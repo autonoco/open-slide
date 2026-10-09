@@ -62,6 +62,37 @@ describe('duplicateSlideDir', () => {
     });
   });
 
+  it('gives concurrent automatic copies distinct ids', async () => {
+    await withSlidesRoot(async (root) => {
+      await writeSlide(root, 'cover');
+
+      const results = await Promise.all([
+        duplicateSlideDir(root, 'cover'),
+        duplicateSlideDir(root, 'cover'),
+      ]);
+      expect(results).toEqual([
+        { ok: true, slideId: 'cover-copy' },
+        { ok: true, slideId: 'cover-copy-2' },
+      ]);
+    });
+  });
+
+  it('lets only one of two concurrent case-equivalent desired ids win', async () => {
+    await withSlidesRoot(async (root) => {
+      await writeSlide(root, 'cover');
+
+      const results = await Promise.all([
+        duplicateSlideDir(root, 'cover', 'Target'),
+        duplicateSlideDir(root, 'cover', 'target'),
+      ]);
+      expect(results).toEqual([
+        { ok: true, slideId: 'Target' },
+        { ok: false, status: 409, error: 'slide already exists' },
+      ]);
+      expect((await fs.readdir(root)).sort()).toEqual(['Target', 'cover']);
+    });
+  });
+
   it('rejects source slide ids with bad characters', async () => {
     await withSlidesRoot(async (root) => {
       expect(await duplicateSlideDir(root, 'bad id')).toMatchObject({ ok: false, status: 400 });
