@@ -18,6 +18,7 @@ export function publishedPreviewsPlugin(directory: string): Plugin {
     async load(source) {
       if (source !== `\0${id}`) return null;
       if (serving) return 'export default {};';
+      this.addWatchFile(indexPath);
       let raw: string;
       try {
         raw = await fs.readFile(indexPath, 'utf8');
@@ -25,7 +26,6 @@ export function publishedPreviewsPlugin(directory: string): Plugin {
         if ((error as NodeJS.ErrnoException).code === 'ENOENT') return 'export default {};';
         throw error;
       }
-      this.addWatchFile(indexPath);
       const index = JSON.parse(raw) as {
         version?: number;
         kind?: string;
