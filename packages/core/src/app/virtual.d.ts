@@ -49,3 +49,8 @@ declare module 'virtual:open-slide/themes' {
     design?: DesignSystem;
   }>;
 }
+
+declare module 'virtual:open-slide/previews' {
+  const previews: Record<string, string | null>;
+  export default previews;
+}

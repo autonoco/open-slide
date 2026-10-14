@@ -1,3 +1,4 @@
+import previews from 'virtual:open-slide/previews';
 import {
   ArrowDownAZ,
   ChevronDown,
@@ -508,7 +509,17 @@ function SlideCard({
         >
           {/* Slide thumb — tight border, grey baseboard, no shadcn rounded-xl */}
           <div className="relative aspect-video overflow-hidden rounded-[6px] border border-hairline bg-card shadow-edge ring-1 ring-foreground/[0.04] group-hover:shadow-floating group-hover:ring-foreground/20 motion-safe:transition-[box-shadow,--tw-ring-color,scale] motion-safe:duration-200 group-active:scale-[0.99]">
-            {FirstPage ? (
+            {Object.hasOwn(previews, id) ? (
+              previews[id] ? (
+                <img
+                  src={previews[id] ?? undefined}
+                  alt=""
+                  loading="lazy"
+                  decoding="async"
+                  className="h-full w-full object-cover object-top"
+                />
+              ) : null
+            ) : FirstPage ? (
               <div className="h-full w-full">
                 <SlideCanvas flat freezeMotion design={slide?.design}>
                   <SlidePageProvider index={0} total={slide?.default.length ?? 1}>
