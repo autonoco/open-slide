@@ -27,6 +27,7 @@ import { isShortcutControlTarget, isTypingTarget } from '@/lib/keys';
 import { textDiff } from '@/lib/text-diff';
 import { useLocale } from '@/lib/use-locale';
 import { round2 } from '@/lib/utils';
+import { hasHostedEditor, switchHostedEditor } from '../../lib/hosted-editor';
 import { AssetPickerDialog } from './asset-picker-dialog';
 import { ImageCropDialog, type ImageCropRect } from './image-crop-dialog';
 
@@ -1553,7 +1554,7 @@ function parsePercent(s: string, fallback: number): number {
 export function InspectModeSwitcher() {
   const t = useLocale();
   const { active, toggle } = useInspector();
-  if (import.meta.env.PROD) return null;
+  if (import.meta.env.PROD && !hasHostedEditor) return null;
   return (
     <ToggleGroup
       size="sm"
@@ -1561,7 +1562,7 @@ export function InspectModeSwitcher() {
       value={[active ? 'edit' : 'preview']}
       onValueChange={(value) => {
         const next = value[0];
-        if (next && (next === 'edit') !== active) toggle();
+        if (next && (next === 'edit') !== active && !switchHostedEditor(next === 'edit')) toggle();
       }}
       aria-label={`${t.inspector.previewMode} / ${t.inspector.editMode}`}
       data-inspector-ui
