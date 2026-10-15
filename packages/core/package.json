@@ -28,6 +28,9 @@
     "dist",
     "env.d.ts",
     "src/app",
+    "src/editing/babel-walk.ts",
+    "src/editing/batch-edit.ts",
+    "src/editing/edit-ops.ts",
     "src/locale",
     "skills",
     "README.md"
