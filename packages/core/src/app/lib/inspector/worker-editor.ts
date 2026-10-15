@@ -1,5 +1,5 @@
 import config from 'virtual:open-slide/config';
-import { slideSourceHashes } from 'virtual:open-slide/slides';
+import { slideSources } from 'virtual:open-slide/slides';
 import type { Edit, EditResult } from './use-editor';
 
 async function publicationComplete(revision: string) {
@@ -32,7 +32,10 @@ async function publicationComplete(revision: string) {
 }
 
 export async function saveWorkerEdits(slideId: string, edits: Edit[]): Promise<EditResult[]> {
-  const path = `${config.slidesDir ?? 'slides'}/${slideId}/index.tsx`;
+  const entry = slideSources[slideId];
+  if (!entry || !/^index\.(tsx|jsx)$/.test(entry.file))
+    throw new Error('This slide format does not support published editing.');
+  const path = `${config.slidesDir ?? 'slides'}/${slideId}/${entry.file}`;
   const url = `/__host/files?path=${encodeURIComponent(path)}`;
   const response = await fetch(url);
   if (!response.ok) throw new Error('Could not read the saved slide.');
@@ -41,8 +44,7 @@ export async function saveWorkerEdits(slideId: string, edits: Edit[]): Promise<E
   const hash = Array.from(new Uint8Array(digest), (byte) =>
     byte.toString(16).padStart(2, '0'),
   ).join('');
-  if (hash !== slideSourceHashes[slideId])
-    throw new Error('This slide changed. Reload before editing.');
+  if (hash !== entry.hash) throw new Error('This slide changed. Reload before editing.');
   const { applyEditBatch } = await import('../../../editing/batch-edit');
   const result = applyEditBatch(current.content, edits);
   const failed = result.results.find((item) => !item.ok);
@@ -53,7 +55,12 @@ export async function saveWorkerEdits(slideId: string, edits: Edit[]): Promise<E
     headers: { 'content-type': 'text/plain;charset=UTF-8', 'If-Match': `"${current.revision}"` },
     body: result.source,
   });
-  const outcome = (await saved.json()) as { revision?: string; error?: string; changed?: boolean };
+  if (saved.status === 409) throw new Error('This slide changed. Reload before editing.');
+  const outcome = (await saved.json().catch(() => ({}))) as {
+    revision?: string;
+    error?: string;
+    changed?: boolean;
+  };
   if (!saved.ok || !outcome.revision) throw new Error(outcome.error ?? 'Could not save this edit.');
   if (outcome.changed === false) return result.results;
   await publicationComplete(outcome.revision);

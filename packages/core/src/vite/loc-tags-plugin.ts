@@ -60,8 +60,8 @@ export type LocTagsPluginOptions = {
 function isSlideSourceFile(id: string, slidesRootPosix: string): boolean {
   const filePath = id.split(/[?#]/)[0].replace(/\\/g, '/');
   if (!filePath.startsWith(`${slidesRootPosix}/`)) return false;
-  if (!filePath.endsWith('.tsx')) return false;
-  if (filePath.endsWith('.d.ts') || filePath.endsWith('.test.tsx')) return false;
+  if (!/\.(tsx|jsx)$/.test(filePath)) return false;
+  if (filePath.endsWith('.d.ts') || /\.test\.(tsx|jsx)$/.test(filePath)) return false;
   const rel = filePath.slice(slidesRootPosix.length + 1);
   return rel.includes('/');
 }

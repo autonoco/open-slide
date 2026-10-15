@@ -115,6 +115,7 @@ export async function generateSlidesModule(
         id,
         importPath,
         sourceHash,
+        entryFile: path.basename(abs),
         theme: meta.theme,
         createdAt: parseCreatedAtMs(meta.createdAt),
       };
@@ -165,7 +166,7 @@ if (import.meta.hot) {
 export const slideIds = ${ids};
 export const slideThemes = ${themesJson};
 export const slideCreatedAt = ${createdAtJson};
-export const slideSourceHashes = ${JSON.stringify(Object.fromEntries(entries.map((entry) => [entry.id, entry.sourceHash])))};
+export const slideSources = ${JSON.stringify(Object.fromEntries(entries.map((entry) => [entry.id, { hash: entry.sourceHash, file: entry.entryFile }])))};
 ${devRuntime}
 
 export async function loadSlide(id) {

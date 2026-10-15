@@ -23,6 +23,11 @@ test.describe('published Worker editor', () => {
     process.env.VITE_BUTTONS_HOSTED = 'true';
     process.env.VITE_BUTTONS_WORKER_EDITOR = 'true';
     project = prepareScratchProject('worker-editor');
+    await fs.mkdir(path.join(project, 'slides/jsx-target'));
+    await fs.writeFile(
+      path.join(project, 'slides/jsx-target/index.jsx'),
+      'export default [() => <div><h1>JSX headline</h1></div>];',
+    );
     const result = await runCli(['build'], project);
     expect(result.code, result.stderr).toBe(0);
     preview = startCliServer(['preview', '--host', '127.0.0.1', '--port', '43123'], project);
@@ -119,5 +124,35 @@ test.describe('published Worker editor', () => {
     await page.getByRole('button', { name: 'Save', exact: true }).click();
     await expect(page.getByText(/This slide changed. Reload before editing/)).toBeVisible();
     expect(writes).toBe(0);
+  });
+  test('uses the discovered JSX file and reports an empty conflict response', async ({ page }) => {
+    let saved = '';
+    await page.route('**/__host/files?*', async (route) => {
+      expect(new URL(route.request().url()).searchParams.get('path')).toBe(
+        'slides/jsx-target/index.jsx',
+      );
+      if (route.request().method() === 'GET') {
+        await route.fulfill({
+          json: {
+            content: await fs.readFile(path.join(project, 'slides/jsx-target/index.jsx'), 'utf8'),
+            revision: 'a'.repeat(40),
+          },
+        });
+      } else {
+        saved = route.request().postData() ?? '';
+        await route.fulfill({ status: 409, body: '' });
+      }
+    });
+    await page.goto(`${baseUrl}/s/jsx-target?edit=1`);
+    const headline = page.locator('main[data-inspector-root] h1');
+    await expect(headline).toHaveAttribute('data-slide-loc', /\d+:\d+/);
+    await headline.click();
+    await page
+      .locator('aside[data-inspector-ui]')
+      .getByPlaceholder('Element text')
+      .fill('Edited JSX');
+    await page.getByRole('button', { name: 'Save', exact: true }).click();
+    await expect(page.getByText(/This slide changed. Reload before editing/)).toBeVisible();
+    expect(saved).toContain('Edited JSX');
   });
 });

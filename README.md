@@ -101,13 +101,15 @@ The inspector lazy-loads the existing source transforms in the browser. It check
 that the published source matches the saved source before submitting a change.
 
 The authenticated host must implement `GET /__host/files?path=slides/<id>/index.tsx`
-returning `{content, revision}`, and `PUT` on the same URL accepting UTF-8 source
+(also supporting `index.jsx`) returning `{content, revision}`, and `PUT` on the same URL accepting UTF-8 source
 with `If-Match: "<revision>"`. The host must derive the repository from the authorized
 workspace, restrict paths and sizes, and reject concurrent writes with HTTP 409.
 A successful save returns `{saved: true, changed: true, revision}`. The editor waits
 for `/__host/publication/<revision>` NDJSON events (`workflow_completed`,
 `workflow_errored`, or `workflow_terminated`) before reloading the published version.
-A failed publication must leave the saved source intact.
+A failed publication must leave the saved source intact. Batches are atomic in this
+pilot: if any source transform fails, nothing is written and all edits stay buffered.
+This avoids reloading the page after a partial save and losing the remaining edits.
 
 This opt-in pilot covers inspector text and style edits. Asset uploads, slide
 creation/reordering, notes and comments still require the development backend;
