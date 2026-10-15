@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
+import { hasWorkerEditor } from '../hosted-editor';
 
 export type SlideComment = {
   id: string;
@@ -15,7 +16,7 @@ export function useComments(slideId: string) {
   const [error, setError] = useState<string | null>(null);
 
   const refetch = useCallback(async () => {
-    if (!slideId) return;
+    if (!slideId || hasWorkerEditor) return;
     try {
       const res = await fetch(`/__comments?slideId=${encodeURIComponent(slideId)}`);
       if (!res.ok) {

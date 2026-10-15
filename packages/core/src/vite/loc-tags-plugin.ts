@@ -70,7 +70,8 @@ export function locTagsPlugin(opts: LocTagsPluginOptions): Plugin {
   const slidesRoot = path.resolve(opts.userCwd, opts.slidesDir ?? 'slides').replace(/\\/g, '/');
   return {
     name: 'open-slide:loc-tags',
-    apply: 'serve',
+    apply: (_config, { command }) =>
+      command === 'serve' || process.env.VITE_BUTTONS_WORKER_EDITOR === 'true',
     // Must run before @vitejs/plugin-react so the JSX transform
     // sees our injected attributes.
     enforce: 'pre',

@@ -93,6 +93,27 @@ pnpm check    # type-checks all packages
 pnpm lint     # lints via biome
 ```
 
+## Published Worker editor pilot
+
+A host can opt into text and style saves in static builds by setting both
+`VITE_BUTTONS_HOSTED=true` and `VITE_BUTTONS_WORKER_EDITOR=true` during the build.
+The inspector lazy-loads the existing source transforms in the browser. It checks
+that the published source matches the saved source before submitting a change.
+
+The authenticated host must implement `GET /__host/files?path=slides/<id>/index.tsx`
+returning `{content, revision}`, and `PUT` on the same URL accepting UTF-8 source
+with `If-Match: "<revision>"`. The host must derive the repository from the authorized
+workspace, restrict paths and sizes, and reject concurrent writes with HTTP 409.
+A successful save returns `{saved: true, changed: true, revision}`. The editor waits
+for `/__host/publication/<revision>` NDJSON events (`workflow_completed`,
+`workflow_errored`, or `workflow_terminated`) before reloading the published version.
+A failed publication must leave the saved source intact.
+
+This opt-in pilot covers inspector text and style edits. Asset uploads, slide
+creation/reordering, notes and comments still require the development backend;
+they are not implemented by this API. Leave the flag off for apps needing those
+operations. The normal hosted editor is unchanged when the flag is absent.
+
 ## Support
 
 If this Autono fork has been useful to you, consider supporting development:

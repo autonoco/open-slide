@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { existsSync } from 'node:fs';
 import fs from 'node:fs/promises';
 import path from 'node:path';
@@ -107,7 +108,16 @@ export async function generateSlidesModule(
       const id = toId(abs, slidesRoot);
       const importPath = isDev ? `@fs/${normalizePath(abs).replace(/^\/+/, '')}` : abs;
       const meta = await readSlideMeta(abs);
-      return { id, importPath, theme: meta.theme, createdAt: parseCreatedAtMs(meta.createdAt) };
+      const sourceHash = createHash('sha256')
+        .update(await fs.readFile(abs))
+        .digest('hex');
+      return {
+        id,
+        importPath,
+        sourceHash,
+        theme: meta.theme,
+        createdAt: parseCreatedAtMs(meta.createdAt),
+      };
     }),
   );
 
@@ -155,6 +165,7 @@ if (import.meta.hot) {
 export const slideIds = ${ids};
 export const slideThemes = ${themesJson};
 export const slideCreatedAt = ${createdAtJson};
+export const slideSourceHashes = ${JSON.stringify(Object.fromEntries(entries.map((entry) => [entry.id, entry.sourceHash])))};
 ${devRuntime}
 
 export async function loadSlide(id) {
@@ -205,6 +216,13 @@ export function openSlidePlugin(opts: OpenSlidePluginOptions): Plugin {
     name: 'open-slide',
     config(_c, env) {
       isDev = env.command === 'serve';
+      if (process.env.VITE_BUTTONS_WORKER_EDITOR === 'true')
+        return {
+          define: {
+            'process.env.BABEL_8_BREAKING': 'false',
+            'process.env.BABEL_TYPES_8_BREAKING': 'false',
+          },
+        };
     },
     resolveId(id) {
       if (id === SLIDES_VMOD) return resolved(SLIDES_VMOD);
