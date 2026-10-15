@@ -1,7 +1,8 @@
+import { createHash } from 'node:crypto';
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { generateSlidesModule } from './open-slide-plugin.ts';
 
 async function withSlidesRoot<T>(fn: (root: string) => Promise<T>): Promise<T> {
@@ -46,5 +47,22 @@ describe('generateSlidesModule', () => {
       expect(code).toContain('export const slideIds = ["cover"];');
       expect(code).not.toContain('推薦系統');
     });
+  });
+});
+
+afterEach(() => {
+  vi.unstubAllEnvs();
+});
+it('hashes the exact source in Worker builds and fails rather than publishing a missing slide', async () => {
+  vi.stubEnv('VITE_BUTTONS_WORKER_EDITOR', 'true');
+  await withSlidesRoot(async (root) => {
+    const entry = await writeSlide(root, 'cover');
+    const hash = createHash('sha256')
+      .update(await fs.readFile(entry))
+      .digest('hex');
+    expect((await generateSlidesModule([entry], root, false)).code).toContain(hash);
+    await fs.unlink(entry);
+    await expect(generateSlidesModule([entry], root, false)).rejects.toThrow();
+    await expect(generateSlidesModule([entry], root, true)).resolves.toBeDefined();
   });
 });

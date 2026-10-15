@@ -27,7 +27,7 @@ import { isShortcutControlTarget, isTypingTarget } from '@/lib/keys';
 import { textDiff } from '@/lib/text-diff';
 import { useLocale } from '@/lib/use-locale';
 import { round2 } from '@/lib/utils';
-import { hasHostedEditor, switchHostedEditor } from '../../lib/hosted-editor';
+import { hasHostedEditor, hasWorkerEditor, switchHostedEditor } from '../../lib/hosted-editor';
 import { AssetPickerDialog } from './asset-picker-dialog';
 import { ImageCropDialog, type ImageCropRect } from './image-crop-dialog';
 
@@ -430,7 +430,11 @@ export function InspectorProvider({
   onPanelOpen?: () => void;
   children: ReactNode;
 }) {
-  const [active, setActive] = useState(import.meta.env.DEV);
+  const [active, setActive] = useState(
+    () =>
+      import.meta.env.DEV ||
+      (hasWorkerEditor && new URLSearchParams(window.location.search).get('edit') === '1'),
+  );
   const [panelOpen, setPanelOpen] = useState(
     () => typeof window !== 'undefined' && window.innerWidth >= 1024,
   );

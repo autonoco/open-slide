@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { existsSync } from 'node:fs';
 import fs from 'node:fs/promises';
 import path from 'node:path';
@@ -106,8 +107,18 @@ export async function generateSlidesModule(
     files.map(async (abs) => {
       const id = toId(abs, slidesRoot);
       const importPath = isDev ? `@fs/${normalizePath(abs).replace(/^\/+/, '')}` : abs;
-      const meta = await readSlideMeta(abs);
-      return { id, importPath, theme: meta.theme, createdAt: parseCreatedAtMs(meta.createdAt) };
+      const source =
+        !isDev && process.env.VITE_BUTTONS_WORKER_EDITOR === 'true' ? await fs.readFile(abs) : null;
+      const meta = source ? extractMeta(source.toString('utf8')) : await readSlideMeta(abs);
+      const sourceHash = source ? createHash('sha256').update(source).digest('hex') : '';
+      return {
+        id,
+        importPath,
+        sourceHash,
+        entryFile: path.basename(abs),
+        theme: meta.theme,
+        createdAt: parseCreatedAtMs(meta.createdAt),
+      };
     }),
   );
 
@@ -155,6 +166,7 @@ if (import.meta.hot) {
 export const slideIds = ${ids};
 export const slideThemes = ${themesJson};
 export const slideCreatedAt = ${createdAtJson};
+export const slideSources = ${JSON.stringify(Object.fromEntries(entries.map((entry) => [entry.id, { hash: entry.sourceHash, file: entry.entryFile }])))};
 ${devRuntime}
 
 export async function loadSlide(id) {
@@ -205,6 +217,13 @@ export function openSlidePlugin(opts: OpenSlidePluginOptions): Plugin {
     name: 'open-slide',
     config(_c, env) {
       isDev = env.command === 'serve';
+      if (process.env.VITE_BUTTONS_WORKER_EDITOR === 'true')
+        return {
+          define: {
+            'process.env.BABEL_8_BREAKING': 'false',
+            'process.env.BABEL_TYPES_8_BREAKING': 'false',
+          },
+        };
     },
     resolveId(id) {
       if (id === SLIDES_VMOD) return resolved(SLIDES_VMOD);
