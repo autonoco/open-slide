@@ -6,27 +6,41 @@ async function publicationComplete(revision: string) {
   const response = await fetch(`/__host/publication/${revision}`, {
     signal: AbortSignal.timeout(16 * 60_000),
   });
-  if (!response.ok || !response.body)
-    throw new Error('Your edit is saved, but publication progress is unavailable.');
+  if (!response.ok || !response.body) throw new Error('Publication progress is unavailable.');
   const reader = response.body.pipeThrough(new TextDecoderStream()).getReader();
   let buffer = '';
   try {
     for (;;) {
       const { value, done } = await reader.read();
-      if (done) throw new Error('Your edit is saved, but publication has not been confirmed.');
+      if (done) throw new Error('Publication has not been confirmed.');
       buffer += value;
       let end = buffer.indexOf('\n');
       while (end >= 0) {
-        const event = JSON.parse(buffer.slice(0, end)) as { type: string };
+        const line = buffer.slice(0, end).trim();
         buffer = buffer.slice(end + 1);
+        end = buffer.indexOf('\n');
+        if (!line) continue;
+        let event: { type: string };
+        try {
+          event = JSON.parse(line);
+          if (!event || typeof event.type !== 'string')
+            throw new Error('Invalid publication event');
+        } catch (cause) {
+          throw new Error('Publication progress is unavailable.', {
+            cause,
+          });
+        }
         if (event.type === 'workflow_completed') return;
         if (event.type === 'workflow_errored' || event.type === 'workflow_terminated')
-          throw new Error('Your edit is saved, but publishing failed.');
-        end = buffer.indexOf('\n');
+          throw new Error('Publishing failed.');
       }
     }
   } finally {
-    await reader.cancel();
+    try {
+      await reader.cancel();
+    } catch (error) {
+      console.warn('Publication stream cleanup failed', error);
+    }
     reader.releaseLock();
   }
 }
@@ -63,7 +77,14 @@ export async function saveWorkerEdits(slideId: string, edits: Edit[]): Promise<E
   };
   if (!saved.ok || !outcome.revision) throw new Error(outcome.error ?? 'Could not save this edit.');
   if (outcome.changed === false) return result.results;
-  await publicationComplete(outcome.revision);
+  try {
+    await publicationComplete(outcome.revision);
+  } catch (cause) {
+    throw new Error(
+      `Your edit is saved. ${cause instanceof Error ? cause.message : String(cause)}`,
+      { cause },
+    );
+  }
   window.location.reload();
   return result.results;
 }

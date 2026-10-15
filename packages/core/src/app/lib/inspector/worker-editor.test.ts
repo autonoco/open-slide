@@ -26,3 +26,21 @@ it('keeps a mixed valid/invalid batch unsaved instead of reloading away pending 
   ).rejects.toThrow('No edits saved');
   expect(fetcher).toHaveBeenCalledTimes(1);
 });
+
+it.each([
+  ['\n{"type":"workflow_errored"}\n', 'Publishing failed'],
+  ['not json\n', 'Publication progress is unavailable'],
+])('preserves the saved state when progress fails: %s', async (body, message) => {
+  const fetcher = vi
+    .fn()
+    .mockResolvedValueOnce(Response.json({ content: source, revision: 'a'.repeat(40) }))
+    .mockResolvedValueOnce(Response.json({ revision: 'b'.repeat(40), changed: true }))
+    .mockResolvedValueOnce(new Response(body));
+  vi.stubGlobal('fetch', fetcher);
+  await expect(
+    saveWorkerEdits('deck', [
+      { line: 1, column: source.indexOf('<h1'), ops: [{ kind: 'set-text', value: 'Updated' }] },
+    ]),
+  ).rejects.toThrow(`Your edit is saved. ${message}`);
+  expect(fetcher).toHaveBeenCalledTimes(3);
+});

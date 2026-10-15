@@ -107,10 +107,10 @@ export async function generateSlidesModule(
     files.map(async (abs) => {
       const id = toId(abs, slidesRoot);
       const importPath = isDev ? `@fs/${normalizePath(abs).replace(/^\/+/, '')}` : abs;
-      const meta = await readSlideMeta(abs);
-      const sourceHash = createHash('sha256')
-        .update(await fs.readFile(abs))
-        .digest('hex');
+      const source =
+        !isDev && process.env.VITE_BUTTONS_WORKER_EDITOR === 'true' ? await fs.readFile(abs) : null;
+      const meta = source ? extractMeta(source.toString('utf8')) : await readSlideMeta(abs);
+      const sourceHash = source ? createHash('sha256').update(source).digest('hex') : '';
       return {
         id,
         importPath,
