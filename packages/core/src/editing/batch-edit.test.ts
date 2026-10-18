@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { applyEditBatch, type BatchEdit } from './batch-edit.ts';
-import type { EditOp } from './edit-ops.ts';
+import { applyEdit, type EditOp } from './edit-ops.ts';
 
 function edit(source: string, marker: string, ops: EditOp[]): BatchEdit {
   const offset = source.indexOf(marker);
@@ -357,4 +357,69 @@ describe('repeated component children', () => {
     expect(result.source).toBe(duplicate);
     expect(result.results[0].error).toMatch(/cannot disambiguate/);
   });
+});
+
+describe('scoped target associations', () => {
+  const source = [
+    'const Line = ({ children }) => <div>{children}</div>;',
+    'const First = () => <section><Line>Same</Line></section>;',
+    'const Second = () => <section><Line>Same</Line></section>;',
+    'const Other = () => <p>Changed</p>;',
+  ].join('\n');
+  const scoped = (line: number) =>
+    edit(source, '<div>', [
+      {
+        kind: 'set-text',
+        value: 'Changed',
+        prevText: 'Same',
+        sourceScopes: [{ line, column: source.split('\n')[line - 1].indexOf('<section>') }],
+      },
+    ]);
+  const style = edit(source, '<div>', [
+    { kind: 'set-style', key: 'color', value: 'red', prevText: 'Changed' },
+  ]);
+  it('styles the preceding scoped text target rather than identical original text', () => {
+    const result = applyEditBatch(source, [scoped(2), style]);
+    expect(result.results).toEqual([{ ok: true }, { ok: true }]);
+    expect(result.source).toContain("<Line style={{ color: 'red' }}>Changed</Line>");
+    expect(result.source).toContain('<p>Changed</p>');
+    expect(result.source).toContain('<Line>Same</Line>');
+  });
+  it('refuses an unscoped style when two scoped targets have the same new text', () => {
+    const result = applyEditBatch(source, [scoped(2), scoped(3), style]);
+    expect(result.results[2].ok).toBe(false);
+    expect(result.source).not.toContain('color:');
+  });
+});
+
+describe('scoped prop text', () => {
+  for (const value of ['"Same"', '{"Same"}', '{42}']) {
+    it(`preserves the selected prop splice for ${value}`, () => {
+      const source = [
+        'const Label = ({ title }) => <div>{title}</div>;',
+        `const First = () => <section><Label title=${value} other="untouched" /></section>;`,
+        `const Second = () => <section><Label title=${value} other="untouched" /></section>;`,
+      ].join('\n');
+      const change = (text: string, prevText: string) =>
+        edit(source, '<div>', [
+          {
+            kind: 'set-text',
+            value: text,
+            prevText,
+            sourceScopes: [{ line: 2, column: source.split('\n')[1].indexOf('<section>') }],
+          },
+        ]);
+      const first = change('Final', value === '{42}' ? '42' : 'Same');
+      expect(applyEdit(source, first.line ?? 0, first.column ?? 0, first.ops ?? [])).toEqual({
+        ok: true,
+        source: source.replace(`title=${value}`, 'title="Final"'),
+      });
+      const result = applyEditBatch(source, [
+        change('Longer value', value === '{42}' ? '42' : 'Same'),
+        change('Final', 'Longer value'),
+      ]);
+      expect(result.results).toEqual([{ ok: true }, { ok: true }]);
+      expect(result.source).toBe(source.replace(`title=${value}`, 'title="Final"'));
+    });
+  }
 });

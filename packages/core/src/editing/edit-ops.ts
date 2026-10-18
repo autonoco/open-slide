@@ -218,10 +218,10 @@ export function findElementForEdit(
   line: number,
   column: number,
   ops: EditOp[],
-): t.JSXElement | null {
+): { element: t.JSXElement; textProp?: string } | null {
   const element = findInnermostJsxElement(ast, line, column);
   const prevText = fallbackTextForOps(ops);
-  if (prevText === null) return element;
+  if (prevText === null) return element ? { element } : null;
   if (element && hasOnlyTextOps(ops)) {
     const textOp = ops.find((op) => op.kind === 'set-text');
     const scopes = textOp?.kind === 'set-text' ? textOp.sourceScopes : undefined;
@@ -239,7 +239,9 @@ export function findElementForEdit(
             (callSite.start ?? -1) > (ancestor.start ?? 0) &&
             (callSite.end ?? Infinity) < (ancestor.end ?? 0),
         );
-        if (scoped.length === 1 && scoped[0].callSite) return scoped[0].callSite;
+        if (scoped.length === 1 && scoped[0].callSite) {
+          return { element: scoped[0].callSite, textProp: scoped[0].propName };
+        }
         if (scoped.length > 1) break;
       }
     }
@@ -249,9 +251,10 @@ export function findElementForEdit(
     element &&
     (elementTextMatches(element, prevText) || elementTextCandidateMatches(ast, element, prevText))
   ) {
-    return element;
+    return { element };
   }
-  return findUniqueElementByText(ast, prevText) ?? element;
+  const target = findUniqueElementByText(ast, prevText) ?? element;
+  return target ? { element: target } : null;
 }
 
 function buildStyleSplice(
@@ -368,6 +371,7 @@ function formatJsxText(value: string): string {
 }
 
 type TextCandidate = {
+  propName?: string;
   callSite?: t.JSXElement;
   // Normalized current text the candidate represents — what an
   // unambiguous DOM `textContent` would render here. Used to match
@@ -876,6 +880,8 @@ function collectPropCallSiteCandidates(
     const v = attr.value;
     if (t.isStringLiteral(v)) {
       out.push({
+        callSite: n,
+        propName,
         current: v.value,
         splice: (s) => spliceRange(v, formatJsxAttrValue(s)),
       });
@@ -883,6 +889,8 @@ function collectPropCallSiteCandidates(
       const expr = v.expression;
       if (t.isStringLiteral(expr) || t.isNumericLiteral(expr)) {
         out.push({
+          callSite: n,
+          propName,
           current: String(expr.value),
           splice: (s) => spliceRange(v, formatJsxAttrValue(s)),
         });
@@ -1050,8 +1058,13 @@ function buildTextSplice(
   element: t.JSXElement,
   value: string,
   prevText?: string,
+  textProp?: string,
 ): Splice | { error: string } {
-  const candidates = collectElementTextCandidates(ast, element);
+  const name = element.openingElement.name;
+  const candidates =
+    textProp && t.isJSXIdentifier(name)
+      ? collectPropCallSiteCandidates(element, name.name, textProp)
+      : collectElementTextCandidates(ast, element);
   if (candidates.length === 0) {
     return { error: 'element has no editable text' };
   }
@@ -1173,14 +1186,15 @@ export function planEdit(
   column: number,
   ops: EditOp[],
   exactLocation = false,
+  textProp?: string,
 ): { ok: true; splices: Splice[] } | { ok: false; status: number; error: string } {
   if (ops.length === 0) return { ok: true, splices: [] };
 
   const ast = parseSource(source);
   if (!ast) return { ok: false, status: 422, error: 'could not parse source' };
-  const element = exactLocation
-    ? findJsxByStart(ast, line, column)
-    : findElementForEdit(ast, line, column, ops);
+  const target = exactLocation ? null : findElementForEdit(ast, line, column, ops);
+  const element = exactLocation ? findJsxByStart(ast, line, column) : target?.element;
+  const selectedProp = textProp ?? target?.textProp;
   if (!element) return { ok: false, status: 422, error: 'no JSX element at location' };
 
   const splices: Splice[] = [];
@@ -1213,16 +1227,21 @@ export function planEdit(
 
   for (const op of ops) {
     if (op.kind !== 'set-text') continue;
-    if (op.prevText !== undefined && (op.value.includes('\n') || op.prevText.includes('\n'))) {
+    if (
+      !selectedProp &&
+      op.prevText !== undefined &&
+      (op.value.includes('\n') || op.prevText.includes('\n'))
+    ) {
       const richResult = buildTextContentSplices(element, op.value, op.prevText);
       if (!('error' in richResult)) {
         splices.push(...richResult);
         continue;
       }
     }
-    const result = buildTextSplice(ast, element, op.value, op.prevText);
+    const result = buildTextSplice(ast, element, op.value, op.prevText, selectedProp);
     if ('error' in result) {
-      if (op.prevText === undefined) return { ok: false, status: 422, error: result.error };
+      if (selectedProp || op.prevText === undefined)
+        return { ok: false, status: 422, error: result.error };
       const richResult = buildTextContentSplices(element, op.value, op.prevText);
       if ('error' in richResult) return { ok: false, status: 422, error: result.error };
       splices.push(...richResult);
