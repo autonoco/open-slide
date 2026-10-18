@@ -59,7 +59,10 @@ export function applyEditBatch(
     }
     if (!edit.ops.length) return { offset: null, ops: [], dependsOn: edit.dependsOn };
     if (!ast) return { offset: null, ops: edit.ops, error: 'could not parse source' };
-    const location = `${edit.line}:${edit.column ?? 0}:`;
+    const scopedText = edit.ops.find((op) => op.kind === 'set-text');
+    const scopeKey =
+      scopedText?.kind === 'set-text' ? JSON.stringify(scopedText.sourceScopes ?? []) : '[]';
+    const location = `${edit.line}:${edit.column ?? 0}:${scopeKey}:`;
     const textOp = edit.ops.find((op) => 'prevText' in op && op.prevText !== undefined);
     const prevText = textOp && 'prevText' in textOp ? textOp.prevText : undefined;
     const offset =

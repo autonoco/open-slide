@@ -4,7 +4,12 @@ import { findJsxAncestors, parseSource, walkAll, walkJsx } from './babel-walk.ts
 
 export type EditOp =
   | { kind: 'set-style'; key: string; value: string | null; prevText?: string }
-  | { kind: 'set-text'; value: string; prevText?: string }
+  | {
+      kind: 'set-text';
+      value: string;
+      prevText?: string;
+      sourceScopes?: { line: number; column: number }[];
+    }
   | {
       kind: 'set-text-range-style';
       start: number;
@@ -217,6 +222,28 @@ export function findElementForEdit(
   const element = findInnermostJsxElement(ast, line, column);
   const prevText = fallbackTextForOps(ops);
   if (prevText === null) return element;
+  if (element && hasOnlyTextOps(ops)) {
+    const textOp = ops.find((op) => op.kind === 'set-text');
+    const scopes = textOp?.kind === 'set-text' ? textOp.sourceScopes : undefined;
+    const matches = collectElementTextCandidates(ast, element).filter(
+      (candidate) => candidate.current === prevText.trim(),
+    );
+    if (matches.length > 1 && Array.isArray(scopes)) {
+      for (const scope of scopes) {
+        if (!scope || !Number.isInteger(scope.line) || !Number.isInteger(scope.column)) continue;
+        const ancestor = findJsxByStart(ast, scope.line, scope.column);
+        if (!ancestor) continue;
+        const scoped = matches.filter(
+          ({ callSite }) =>
+            callSite &&
+            (callSite.start ?? -1) > (ancestor.start ?? 0) &&
+            (callSite.end ?? Infinity) < (ancestor.end ?? 0),
+        );
+        if (scoped.length === 1 && scoped[0].callSite) return scoped[0].callSite;
+        if (scoped.length > 1) break;
+      }
+    }
+  }
   if (
     hasOnlyTextOps(ops) &&
     element &&
@@ -341,6 +368,7 @@ function formatJsxText(value: string): string {
 }
 
 type TextCandidate = {
+  callSite?: t.JSXElement;
   // Normalized current text the candidate represents — what an
   // unambiguous DOM `textContent` would render here. Used to match
   // against the client-supplied `prevText` when there's more than one.
@@ -825,7 +853,9 @@ function collectCallSiteCandidates(ast: t.Node, componentName: string): TextCand
     if (!t.isJSXElement(n)) return;
     const elName = n.openingElement.name;
     if (t.isJSXIdentifier(elName) && elName.name === componentName) {
-      collectTextCandidates(n, out);
+      const candidates: TextCandidate[] = [];
+      collectTextCandidates(n, candidates);
+      out.push(...candidates.map((candidate) => ({ ...candidate, callSite: n })));
     }
   });
   return out;

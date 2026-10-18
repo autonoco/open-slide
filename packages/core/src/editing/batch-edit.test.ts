@@ -297,3 +297,64 @@ export default () => (
     expect(result.source).toBe("<p style={{ color: 'blue' }}>Body</p>");
   });
 });
+
+describe('repeated component children', () => {
+  const source = [
+    'const Line = ({ children }) => <div>{children}</div>;',
+    'const First = () => <section><Line>Introducing</Line></section>;',
+    'const Second = () => <section><Line>Introducing</Line></section>;',
+  ].join('\n');
+  function textEdit(scope: string, value: string, prevText = 'Introducing') {
+    const parent = edit(source, scope, []);
+    return edit(source, '<div>', [
+      {
+        kind: 'set-text',
+        value,
+        prevText,
+        sourceScopes: [
+          { line: parent.line ?? 0, column: (parent.column ?? 0) + scope.indexOf('<section>') },
+        ],
+      },
+    ]);
+  }
+  it('changes only the selected call site and rebases subsequent edits', () => {
+    const result = applyEditBatch(source, [
+      textEdit('const First = () => <section>', 'Introducing something longer'),
+      textEdit('const Second = () => <section>', 'Introducing something longer'),
+      textEdit('const Second = () => <section>', 'Second only', 'Introducing something longer'),
+    ]);
+    expect(result.results).toEqual([{ ok: true }, { ok: true }, { ok: true }]);
+    expect(result.source).toBe(
+      source
+        .replace('<Line>Introducing</Line>', '<Line>Introducing something longer</Line>')
+        .replace('<Line>Introducing</Line>', '<Line>Second only</Line>'),
+    );
+  });
+  it('refuses duplicate children without a matching scope', () => {
+    for (const sourceScopes of [undefined, [{ line: 99, column: 0 }]]) {
+      const result = applyEditBatch(source, [
+        edit(source, '<div>', [
+          {
+            kind: 'set-text',
+            value: 'Changed',
+            prevText: 'Introducing',
+            sourceScopes,
+          },
+        ]),
+      ]);
+      expect(result.source).toBe(source);
+      expect(result.results[0].error).toMatch(/cannot disambiguate/);
+    }
+  });
+  it('does not choose between duplicates within the same scope', () => {
+    const duplicate = source.replace(
+      '<Line>Introducing</Line>',
+      '<Line>Introducing</Line><Line>Introducing</Line>',
+    );
+    const result = applyEditBatch(duplicate, [
+      textEdit('const First = () => <section>', 'Changed'),
+    ]);
+    expect(result.source).toBe(duplicate);
+    expect(result.results[0].error).toMatch(/cannot disambiguate/);
+  });
+});
