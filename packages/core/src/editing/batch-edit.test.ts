@@ -389,17 +389,24 @@ describe('scoped target associations', () => {
     expect(result.source).toContain('<p>Changed</p>');
     expect(result.source).toContain('<Line>Same</Line>');
   });
-  it('removes a scoped association when its text changes again', () => {
-    const renamed = scoped(2);
-    const op = renamed.ops?.[0];
-    if (op?.kind !== 'set-text') throw new Error('Missing text fixture');
-    op.prevText = 'Changed';
-    op.value = 'Final';
-    const result = applyEditBatch(source, [scoped(2), renamed, style]);
-    expect(result.results).toEqual([{ ok: true }, { ok: true }, { ok: true }]);
-    expect(result.source).toContain('<Line>Final</Line>');
-    expect(result.source).toContain("<p style={{ color: 'red' }}>Changed</p>");
-  });
+  it.each([false, true])(
+    'removes a scoped association when its text changes again (dependent: %s)',
+    (dependent) => {
+      const renamed = scoped(2);
+      const op = renamed.ops?.[0];
+      if (op?.kind !== 'set-text') throw new Error('Missing text fixture');
+      op.prevText = 'Changed';
+      op.value = 'Final';
+      if (dependent) {
+        renamed.dependsOn = 0;
+        delete op.sourceScopes;
+      }
+      const result = applyEditBatch(source, [scoped(2), renamed, style]);
+      expect(result.results).toEqual([{ ok: true }, { ok: true }, { ok: true }]);
+      expect(result.source).toContain('<Line>Final</Line>');
+      expect(result.source).toContain("<p style={{ color: 'red' }}>Changed</p>");
+    },
+  );
   it('refuses an unscoped style when two scoped targets have the same new text', () => {
     const result = applyEditBatch(source, [scoped(2), scoped(3), style]);
     expect(result.results[2].ok).toBe(false);

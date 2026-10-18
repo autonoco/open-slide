@@ -103,10 +103,10 @@ export function applyEditBatch(
       for (const op of edit.ops) {
         if (op.kind !== 'set-text') continue;
         textTargets.set(`${location}${op.value}`, target);
+        if (target.scopedCallSite && op.prevText !== undefined) {
+          scopedTargets.get(`${edit.line}:${edit.column ?? 0}:${op.prevText}`)?.delete(offset);
+        }
         if (op.sourceScopes?.length) {
-          if (op.prevText !== undefined) {
-            scopedTargets.get(`${edit.line}:${edit.column ?? 0}:${op.prevText}`)?.delete(offset);
-          }
           const key = `${edit.line}:${edit.column ?? 0}:${op.value}`;
           const matches = scopedTargets.get(key) ?? new Map<number, Target>();
           matches.set(offset, target);
