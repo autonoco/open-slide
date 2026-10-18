@@ -1,8 +1,12 @@
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
-import { findSlideSource } from './fiber.ts';
+import { findSlideSource, findSourceScopes } from './fiber.ts';
 
 class FakeHTMLElement {
   dataset: Record<string, string> = {};
+  parentElement: FakeHTMLElement | null = null;
+  hasAttribute() {
+    return false;
+  }
   private closestSelf: FakeHTMLElement | null = null;
   setClosestSelfForSlideLoc() {
     this.closestSelf = this;
@@ -151,4 +155,16 @@ describe('findSlideSource fallback', () => {
     expect(hit?.line).toBe(99);
     expect(hit?.column).toBe(3);
   });
+});
+
+it('collects nearest source scopes for a repeated component instance', () => {
+  const selected = makeEl({ slideLoc: '161:4' });
+  const inner = makeEl({ slideLoc: '241:8' });
+  const outer = makeEl({ slideLoc: '239:4' });
+  selected.parentElement = inner;
+  inner.parentElement = outer;
+  expect(findSourceScopes(selected as unknown as HTMLElement)).toEqual([
+    { line: 241, column: 8 },
+    { line: 239, column: 4 },
+  ]);
 });

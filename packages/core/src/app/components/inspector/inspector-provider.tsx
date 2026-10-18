@@ -14,7 +14,7 @@ import { useHistory } from '@/components/history-provider';
 import { IconSwitcherIndicator } from '@/components/icon-switcher-indicator';
 import { Button } from '@/components/ui/button';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
-import { findSlideSource } from '@/lib/inspector/fiber';
+import { findSlideSource, findSourceScopes } from '@/lib/inspector/fiber';
 import {
   appendTextEdit,
   type TextEditOp,
@@ -641,7 +641,11 @@ export function InspectorProvider({
           }
           const steps = appendTextEdit(
             bucket.textEdits.get(instanceId) ?? [],
-            { ...op, prevText },
+            {
+              ...op,
+              prevText,
+              ...(op.kind === 'set-text' ? { sourceScopes: findSourceScopes(anchor) } : {}),
+            },
             seq,
           );
           bucket.textEdits.set(instanceId, steps);

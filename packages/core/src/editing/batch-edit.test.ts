@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { applyEditBatch, type BatchEdit } from './batch-edit.ts';
-import type { EditOp } from './edit-ops.ts';
+import { applyEdit, type EditOp } from './edit-ops.ts';
 
 function edit(source: string, marker: string, ops: EditOp[]): BatchEdit {
   const offset = source.indexOf(marker);
@@ -296,4 +296,152 @@ export default () => (
     ]);
     expect(result.source).toBe("<p style={{ color: 'blue' }}>Body</p>");
   });
+});
+
+describe('repeated component children', () => {
+  const source = [
+    'const Line = ({ children }) => <div>{children}</div>;',
+    'const First = () => <section><Line>Introducing</Line></section>;',
+    'const Second = () => <section><Line>Introducing</Line></section>;',
+  ].join('\n');
+  function textEdit(scope: string, value: string, prevText = 'Introducing') {
+    const parent = edit(source, scope, []);
+    return edit(source, '<div>', [
+      {
+        kind: 'set-text',
+        value,
+        prevText,
+        sourceScopes: [
+          { line: parent.line ?? 0, column: (parent.column ?? 0) + scope.indexOf('<section>') },
+        ],
+      },
+    ]);
+  }
+  it('changes only the selected call site and rebases subsequent edits', () => {
+    const result = applyEditBatch(source, [
+      textEdit('const First = () => <section>', 'Introducing something longer'),
+      textEdit('const Second = () => <section>', 'Introducing something longer'),
+      textEdit('const Second = () => <section>', 'Second only', 'Introducing something longer'),
+    ]);
+    expect(result.results).toEqual([{ ok: true }, { ok: true }, { ok: true }]);
+    expect(result.source).toBe(
+      source
+        .replace('<Line>Introducing</Line>', '<Line>Introducing something longer</Line>')
+        .replace('<Line>Introducing</Line>', '<Line>Second only</Line>'),
+    );
+  });
+  it('refuses duplicate children without a matching scope', () => {
+    for (const sourceScopes of [undefined, [{ line: 99, column: 0 }]]) {
+      const result = applyEditBatch(source, [
+        edit(source, '<div>', [
+          {
+            kind: 'set-text',
+            value: 'Changed',
+            prevText: 'Introducing',
+            sourceScopes,
+          },
+        ]),
+      ]);
+      expect(result.source).toBe(source);
+      expect(result.results[0].error).toMatch(/cannot disambiguate/);
+    }
+  });
+  it('does not choose between duplicates within the same scope', () => {
+    const duplicate = source.replace(
+      '<Line>Introducing</Line>',
+      '<Line>Introducing</Line><Line>Introducing</Line>',
+    );
+    const result = applyEditBatch(duplicate, [
+      textEdit('const First = () => <section>', 'Changed'),
+    ]);
+    expect(result.source).toBe(duplicate);
+    expect(result.results[0].error).toMatch(/cannot disambiguate/);
+  });
+});
+
+describe('scoped target associations', () => {
+  const source = [
+    'const Line = ({ children }) => <div>{children}</div>;',
+    'const First = () => <section><Line>Same</Line></section>;',
+    'const Second = () => <section><Line>Same</Line></section>;',
+    'const Other = () => <p>Changed</p>;',
+  ].join('\n');
+  const scoped = (line: number) =>
+    edit(source, '<div>', [
+      {
+        kind: 'set-text',
+        value: 'Changed',
+        prevText: 'Same',
+        sourceScopes: [{ line, column: source.split('\n')[line - 1].indexOf('<section>') }],
+      },
+    ]);
+  const style = edit(source, '<div>', [
+    { kind: 'set-style', key: 'color', value: 'red', prevText: 'Changed' },
+  ]);
+  it('rejects unsupported scoped formatting rather than styling identical original text', () => {
+    const result = applyEditBatch(source, [scoped(2), style]);
+    expect(result.results).toEqual([
+      { ok: true },
+      { ok: false, error: 'cannot apply formatting to a scoped component call site' },
+    ]);
+    expect(result.source).toContain('<Line>Changed</Line>');
+    expect(result.source).not.toContain('color:');
+    expect(result.source).toContain('<p>Changed</p>');
+    expect(result.source).toContain('<Line>Same</Line>');
+  });
+  it.each([false, true])(
+    'removes a scoped association when its text changes again (dependent: %s)',
+    (dependent) => {
+      const renamed = scoped(2);
+      const op = renamed.ops?.[0];
+      if (op?.kind !== 'set-text') throw new Error('Missing text fixture');
+      op.prevText = 'Changed';
+      op.value = 'Final';
+      if (dependent) {
+        renamed.dependsOn = 0;
+        delete op.sourceScopes;
+      }
+      const result = applyEditBatch(source, [scoped(2), renamed, style]);
+      expect(result.results).toEqual([{ ok: true }, { ok: true }, { ok: true }]);
+      expect(result.source).toContain('<Line>Final</Line>');
+      expect(result.source).toContain("<p style={{ color: 'red' }}>Changed</p>");
+    },
+  );
+  it('refuses an unscoped style when two scoped targets have the same new text', () => {
+    const result = applyEditBatch(source, [scoped(2), scoped(3), style]);
+    expect(result.results[2].ok).toBe(false);
+    expect(result.source).not.toContain('color:');
+  });
+});
+
+describe('scoped prop text', () => {
+  for (const value of ['"Same"', '{"Same"}', '{42}']) {
+    it(`preserves the selected prop splice for ${value}`, () => {
+      const source = [
+        'const Label = ({ title }) => <div>{title}</div>;',
+        `const First = () => <section><Label title=${value} other="untouched" /></section>;`,
+        `const Second = () => <section><Label title=${value} other="untouched" /></section>;`,
+      ].join('\n');
+      const change = (text: string, prevText: string) =>
+        edit(source, '<div>', [
+          {
+            kind: 'set-text',
+            value: text,
+            prevText,
+            sourceScopes: [{ line: 2, column: source.split('\n')[1].indexOf('<section>') }],
+          },
+        ]);
+      const first = change('Final', value === '{42}' ? '42' : 'Same');
+      expect(applyEdit(source, first.line ?? 0, first.column ?? 0, first.ops ?? [])).toEqual({
+        ok: true,
+        source: source.replace(`title=${value}`, 'title="Final"'),
+      });
+      const result = applyEditBatch(source, [
+        change('Longer value', value === '{42}' ? '42' : 'Same'),
+        change('Final', 'Longer value'),
+      ]);
+      expect(result.results).toEqual([{ ok: true }, { ok: true }]);
+      expect(result.source).toBe(source.replace(`title=${value}`, 'title="Final"'));
+    });
+  }
 });

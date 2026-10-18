@@ -83,3 +83,13 @@ export function findSlideSource(
   }
   return null;
 }
+
+export function findSourceScopes(el: HTMLElement): { line: number; column: number }[] {
+  const scopes: { line: number; column: number }[] = [];
+  for (let parent = el.parentElement; parent; parent = parent.parentElement) {
+    const match = /^(\d+):(\d+)$/.exec(parent.dataset.slideLoc ?? '');
+    if (match) scopes.push({ line: Number(match[1]), column: Number(match[2]) });
+    if (parent.hasAttribute('data-inspector-root')) break;
+  }
+  return scopes;
+}
