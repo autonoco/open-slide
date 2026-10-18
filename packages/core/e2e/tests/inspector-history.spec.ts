@@ -311,7 +311,12 @@ ${
         };
         expect(sent.edits.flatMap((edit) => edit.ops)).toEqual([
           { kind: 'set-style', key: 'fontSize', value: '40px', prevText: 'Before first' },
-          { kind: 'set-text', value: 'After first', prevText: 'Before first' },
+          {
+            kind: 'set-text',
+            value: 'After first',
+            prevText: 'Before first',
+            sourceScopes: [{ line: 21, column: 4 }],
+          },
           ...(sharedStyle
             ? [{ kind: 'set-style', key: 'fontStyle', value: 'italic', prevText: 'Second' }]
             : []),
