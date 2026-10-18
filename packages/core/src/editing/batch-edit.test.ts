@@ -378,12 +378,27 @@ describe('scoped target associations', () => {
   const style = edit(source, '<div>', [
     { kind: 'set-style', key: 'color', value: 'red', prevText: 'Changed' },
   ]);
-  it('styles the preceding scoped text target rather than identical original text', () => {
+  it('rejects unsupported scoped formatting rather than styling identical original text', () => {
     const result = applyEditBatch(source, [scoped(2), style]);
-    expect(result.results).toEqual([{ ok: true }, { ok: true }]);
-    expect(result.source).toContain("<Line style={{ color: 'red' }}>Changed</Line>");
+    expect(result.results).toEqual([
+      { ok: true },
+      { ok: false, error: 'cannot apply formatting to a scoped component call site' },
+    ]);
+    expect(result.source).toContain('<Line>Changed</Line>');
+    expect(result.source).not.toContain('color:');
     expect(result.source).toContain('<p>Changed</p>');
     expect(result.source).toContain('<Line>Same</Line>');
+  });
+  it('removes a scoped association when its text changes again', () => {
+    const renamed = scoped(2);
+    const op = renamed.ops?.[0];
+    if (op?.kind !== 'set-text') throw new Error('Missing text fixture');
+    op.prevText = 'Changed';
+    op.value = 'Final';
+    const result = applyEditBatch(source, [scoped(2), renamed, style]);
+    expect(result.results).toEqual([{ ok: true }, { ok: true }, { ok: true }]);
+    expect(result.source).toContain('<Line>Final</Line>');
+    expect(result.source).toContain("<p style={{ color: 'red' }}>Changed</p>");
   });
   it('refuses an unscoped style when two scoped targets have the same new text', () => {
     const result = applyEditBatch(source, [scoped(2), scoped(3), style]);

@@ -218,7 +218,7 @@ export function findElementForEdit(
   line: number,
   column: number,
   ops: EditOp[],
-): { element: t.JSXElement; textProp?: string } | null {
+): { element: t.JSXElement; textProp?: string; scopedCallSite?: boolean } | null {
   const element = findInnermostJsxElement(ast, line, column);
   const prevText = fallbackTextForOps(ops);
   if (prevText === null) return element ? { element } : null;
@@ -240,7 +240,11 @@ export function findElementForEdit(
             (callSite.end ?? Infinity) < (ancestor.end ?? 0),
         );
         if (scoped.length === 1 && scoped[0].callSite) {
-          return { element: scoped[0].callSite, textProp: scoped[0].propName };
+          return {
+            element: scoped[0].callSite,
+            textProp: scoped[0].propName,
+            scopedCallSite: true,
+          };
         }
         if (scoped.length > 1) break;
       }

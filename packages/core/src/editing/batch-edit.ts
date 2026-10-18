@@ -43,7 +43,7 @@ export function applyEditBatch(
   edits: BatchEdit[],
 ): { source: string; results: BatchEditResult[] } {
   const ast = parseSource(source);
-  type Target = { offset: number; textProp?: string };
+  type Target = { offset: number; textProp?: string; scopedCallSite?: boolean };
   const targets = new Map<number, Target>();
   const textTargets = new Map<string, Target>();
   const scopedTargets = new Map<string, Map<number, Target>>();
@@ -81,18 +81,32 @@ export function applyEditBatch(
       (edit.dependsOn === undefined ? undefined : targets.get(edit.dependsOn)) ??
       associations?.values().next().value ??
       (prevText === undefined ? undefined : textTargets.get(`${location}${prevText}`));
+    if (associated?.scopedCallSite && edit.ops.some((op) => op.kind !== 'set-text')) {
+      return {
+        offset: null,
+        ops: edit.ops,
+        error: 'cannot apply formatting to a scoped component call site',
+      };
+    }
     const resolved = associated
       ? null
       : findElementForEdit(ast, edit.line ?? 0, edit.column ?? 0, edit.ops);
     const offset = associated?.offset ?? resolved?.element.start ?? null;
     const textProp = associated?.textProp ?? resolved?.textProp;
     if (offset !== null) {
-      const target = { offset, textProp };
+      const target = {
+        offset,
+        textProp,
+        scopedCallSite: associated?.scopedCallSite ?? resolved?.scopedCallSite,
+      };
       targets.set(index, target);
       for (const op of edit.ops) {
         if (op.kind !== 'set-text') continue;
         textTargets.set(`${location}${op.value}`, target);
         if (op.sourceScopes?.length) {
+          if (op.prevText !== undefined) {
+            scopedTargets.get(`${edit.line}:${edit.column ?? 0}:${op.prevText}`)?.delete(offset);
+          }
           const key = `${edit.line}:${edit.column ?? 0}:${op.value}`;
           const matches = scopedTargets.get(key) ?? new Map<number, Target>();
           matches.set(offset, target);
