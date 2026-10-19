@@ -30,6 +30,16 @@ import { round2 } from '@/lib/utils';
 import { hasHostedEditor, hasWorkerEditor, switchHostedEditor } from '../../lib/hosted-editor';
 import { AssetPickerDialog } from './asset-picker-dialog';
 import { ImageCropDialog, type ImageCropRect } from './image-crop-dialog';
+import {
+  type AssetAttrOp,
+  type Bucket,
+  completeAsset,
+  completeStyle,
+  createBucket,
+  type Sequenced,
+  type StyleOp,
+  snapshotBuckets,
+} from './pending-edits';
 
 export type SelectedTarget = {
   line: number;
@@ -125,42 +135,26 @@ export type InlineEditTarget = SelectedTarget & {
 export type InlineTextSelection = { start: number; end: number };
 type InlineStyleHandler = (ops: EditOp[]) => boolean;
 
-type AssetAttrOp = { assetPath: string; previewUrl: string };
-type Sequenced<T> = T & { seq: number };
-type StyleOp = { value: string | null; prevText?: string };
+// Retain the saved preview until a fresh published bundle replaces this document.
+const savedPreviews = new Map<string, Map<string, Bucket>>();
 
-type Bucket = {
-  line: number;
-  column: number;
-  styleOps: Map<string, Sequenced<StyleOp>>;
-  // Text edits are scoped per DOM instance: a reused component renders
-  // the same JSX `<h2>{title}</h2>` at multiple call sites with the same
-  // `data-slide-loc`, but each call site's prop literal is independent.
-  // Style/attr ops stay shared because they edit the JSX definition.
-  textEdits: Map<string, TextEditStep[]>;
-  textTargets: Map<string, SelectedTarget & { pageIndex: number }>;
-  attrOps: Map<string, Sequenced<AssetAttrOp>>;
-  // Pre-edit snapshot of the DOM, captured the first time we touch
-  // each style key / text / attribute. Used by `cancelEdits` to revert.
-  origStyle: Map<string, string>;
-  origTexts: Map<string /* instanceId */, { value: string }>;
-  origHtmls: Map<string /* instanceId */, TextDomSnapshot>;
-  origAttrs: Map<string, string | null>;
-};
-
-function createBucket(line: number, column: number): Bucket {
-  return {
-    line,
-    column,
-    styleOps: new Map(),
-    textEdits: new Map(),
-    textTargets: new Map(),
-    attrOps: new Map(),
-    origStyle: new Map(),
-    origTexts: new Map(),
-    origHtmls: new Map(),
-    origAttrs: new Map(),
-  };
+function retainPreview(slideId: string, key: string, bucket: Bucket) {
+  let saved = savedPreviews.get(slideId);
+  if (!saved) {
+    saved = new Map();
+    savedPreviews.set(slideId, saved);
+  }
+  const previous = saved.get(key) ?? createBucket(bucket.line, bucket.column);
+  for (const [key, value] of bucket.styleOps) previous.styleOps.set(key, value);
+  for (const [key, value] of bucket.attrOps) previous.attrOps.set(key, value);
+  for (const [key, value] of bucket.textTargets) previous.textTargets.set(key, value);
+  for (const [key, value] of bucket.origTexts)
+    if (!previous.origTexts.has(key)) previous.origTexts.set(key, value);
+  for (const [key, value] of bucket.origHtmls)
+    if (!previous.origHtmls.has(key)) previous.origHtmls.set(key, value);
+  for (const [key, steps] of bucket.textEdits)
+    previous.textEdits.set(key, [...(previous.textEdits.get(key) ?? []), ...steps]);
+  saved.set(key, previous);
 }
 
 export type DomTextPart = {
@@ -966,10 +960,7 @@ export function InspectorProvider({
             column,
             ops: [{ kind: 'set-style', key: k, value: op.value, prevText: op.prevText }],
           },
-          onSuccess: (b) => {
-            b.styleOps.delete(k);
-            b.origStyle.delete(k);
-          },
+          onSuccess: (b) => completeStyle(b, k, op),
         });
       }
       for (const [attr, op] of attrOps) {
@@ -988,10 +979,7 @@ export function InspectorProvider({
               },
             ],
           },
-          onSuccess: (b) => {
-            b.attrOps.delete(attr);
-            b.origAttrs.delete(attr);
-          },
+          onSuccess: (b) => completeAsset(b, attr, op),
         });
       }
       for (const [instanceId, steps] of textEdits) {
@@ -1034,9 +1022,13 @@ export function InspectorProvider({
       history.clear();
       return;
     }
+    const committedBuckets = snapshotBuckets(buckets);
     setCommitting(true);
     try {
       const results = await applyEdits(pending.map((p) => p.edit));
+      if (hasWorkerEditor && results.length === pending.length && results.every((r) => r.ok)) {
+        for (const [key, bucket] of committedBuckets) retainPreview(slideId, key, bucket);
+      }
       const failures: string[] = [];
       for (let i = 0; i < results.length; i++) {
         const item = pending[i];
@@ -1067,7 +1059,7 @@ export function InspectorProvider({
       setCommitting(false);
       history.clear();
     }
-  }, [applyEdits, history, refreshCount, t]);
+  }, [applyEdits, history, refreshCount, slideId, t]);
 
   const cancelEdits = useCallback(() => {
     if (pendingRef.current.size === 0) {
@@ -1127,10 +1119,10 @@ export function InspectorProvider({
     const root = document.querySelector<HTMLElement>('[data-inspector-root]');
     if (!root) return;
 
-    const applyBuffered = (el: HTMLElement) => {
+    const applyBuffered = (el: HTMLElement, buckets: Map<string, Bucket>) => {
       const loc = el.dataset.slideLoc;
       if (!loc) return;
-      const bucket = pendingRef.current.get(loc);
+      const bucket = buckets.get(loc);
       if (!bucket) return;
       const style = el.style as unknown as Record<string, string>;
       for (const [key, op] of bucket.styleOps) {
@@ -1144,52 +1136,60 @@ export function InspectorProvider({
 
     let observer: MutationObserver | null = null;
     const replayAll = () => {
-      if (pendingRef.current.size === 0) return;
+      const previews = hasWorkerEditor ? savedPreviews.get(slideId) : undefined;
+      if (pendingRef.current.size === 0 && !previews?.size) return;
       observer?.disconnect();
-      const relocations: { key: string; nextKey: string; bucket: Bucket }[] = [];
-      for (const [key, bucket] of pendingRef.current) {
-        for (const [instanceId, target] of bucket.textTargets) {
-          if (target.pageIndex !== pageIndex) continue;
-          const stamped = root.querySelector<HTMLElement>(`[${INSTANCE_ID_ATTR}="${instanceId}"]`);
-          const anchor = stamped ?? findRememberedTarget(root, target.canvasPath);
-          if (!anchor || anchor.tagName !== target.anchor.tagName) continue;
-          const steps = bucket.textEdits.get(instanceId) ?? [];
-          const html = bucket.origHtmls.get(instanceId);
-          if (!html) continue;
-          if (!stamped) {
-            const text = readEditableText(anchor);
-            const matchesBaseline = bucket.origTexts.get(instanceId)?.value === text;
-            if (
-              !matchesBaseline &&
-              !steps.some((step) => step.op.kind === 'set-text' && step.op.value === text)
-            )
-              continue;
+      for (const buckets of [previews, pendingRef.current]) {
+        if (!buckets) continue;
+        const relocations: { key: string; nextKey: string; bucket: Bucket }[] = [];
+        for (const [key, bucket] of buckets) {
+          for (const [instanceId, target] of bucket.textTargets) {
+            if (target.pageIndex !== pageIndex) continue;
+            const stamped = root.querySelector<HTMLElement>(
+              `[${INSTANCE_ID_ATTR}="${instanceId}"]`,
+            );
+            const anchor = stamped ?? findRememberedTarget(root, target.canvasPath);
+            if (!anchor || anchor.tagName !== target.anchor.tagName) continue;
+            const steps = bucket.textEdits.get(instanceId) ?? [];
+            const html = bucket.origHtmls.get(instanceId);
+            if (!html) continue;
+            if (!stamped) {
+              const text = readEditableText(anchor);
+              const matchesBaseline = bucket.origTexts.get(instanceId)?.value === text;
+              if (
+                !matchesBaseline &&
+                !steps.some((step) => step.op.kind === 'set-text' && step.op.value === text)
+              )
+                continue;
+            }
+            const hit = findSlideSource(anchor, slideId, { hostOnly: true });
+            if (!hit || hit.anchor !== anchor) continue;
+            anchor.setAttribute(INSTANCE_ID_ATTR, instanceId);
+            bucket.textTargets.set(instanceId, { ...rememberTarget(hit), pageIndex });
+            bucket.line = hit.line;
+            bucket.column = hit.column;
+            // Native editing can mutate child nodes before its input event updates the buffer.
+            if (!anchor.isContentEditable) replayDomTextEdits(anchor, html, steps);
           }
-          const hit = findSlideSource(anchor, slideId, { hostOnly: true });
-          if (!hit || hit.anchor !== anchor) continue;
-          anchor.setAttribute(INSTANCE_ID_ATTR, instanceId);
-          bucket.textTargets.set(instanceId, { ...rememberTarget(hit), pageIndex });
-          bucket.line = hit.line;
-          bucket.column = hit.column;
-          // Native editing can mutate child nodes before its input event updates the buffer.
-          if (!anchor.isContentEditable) replayDomTextEdits(anchor, html, steps);
+          const nextKey = `${bucket.line}:${bucket.column}`;
+          if (nextKey !== key) relocations.push({ key, nextKey, bucket });
         }
-        const nextKey = `${bucket.line}:${bucket.column}`;
-        if (nextKey !== key) relocations.push({ key, nextKey, bucket });
-      }
-      let moved = true;
-      while (moved) {
-        moved = false;
-        for (let index = relocations.length - 1; index >= 0; index--) {
-          const { key, nextKey, bucket } = relocations[index];
-          if (pendingRef.current.has(nextKey)) continue;
-          pendingRef.current.delete(key);
-          pendingRef.current.set(nextKey, bucket);
-          relocations.splice(index, 1);
-          moved = true;
+        let moved = true;
+        while (moved) {
+          moved = false;
+          for (let index = relocations.length - 1; index >= 0; index--) {
+            const { key, nextKey, bucket } = relocations[index];
+            if (buckets.has(nextKey)) continue;
+            buckets.delete(key);
+            buckets.set(nextKey, bucket);
+            relocations.splice(index, 1);
+            moved = true;
+          }
         }
+        root.querySelectorAll<HTMLElement>('[data-slide-loc]').forEach((el) => {
+          applyBuffered(el, buckets);
+        });
       }
-      root.querySelectorAll<HTMLElement>('[data-slide-loc]').forEach(applyBuffered);
       observer?.observe(root, {
         childList: true,
         subtree: true,
