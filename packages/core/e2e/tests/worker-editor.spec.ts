@@ -82,6 +82,7 @@ test.describe('published Worker editor', () => {
     await expect(page.getByText('Saved. Publishing update…')).toBeVisible();
     await expect(page.getByRole('button', { name: 'Saving', exact: true })).toHaveCount(0);
     await input.fill('Second saved heading');
+    await expect(page.getByText('1 unsaved change', { exact: true })).toBeVisible();
     await page.getByRole('button', { name: 'Save', exact: true }).click();
     await expect.poll(() => revision).toBe(2);
     expect(saved).toContain('Second saved heading');

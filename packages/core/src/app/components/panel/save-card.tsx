@@ -49,7 +49,8 @@ export function SaveCard({
     return () => clearTimeout(t);
   }, [justSaved]);
 
-  const visible = dirty || committing || justSaved || canUndo || canRedo;
+  const showSaved = justSaved && !dirty && !committing;
+  const visible = dirty || committing || showSaved || canUndo || canRedo;
   const { mounted, animVisible } = usePanelMount(visible);
   if (!mounted) return null;
 
@@ -60,7 +61,7 @@ export function SaveCard({
 
   const dataAttrs = uiAttr === 'inspector' ? { 'data-inspector-ui': '' } : { 'data-design-ui': '' };
 
-  const showHistory = !justSaved && (onUndo || onRedo);
+  const showHistory = !showSaved && (onUndo || onRedo);
 
   return (
     <div
@@ -98,12 +99,12 @@ export function SaveCard({
             >
               <Redo2 className="size-3.5" />
             </Button>
-            {(justSaved || dirty || committing) && (
+            {(showSaved || dirty || committing) && (
               <span aria-hidden className="ml-1 mr-0.5 h-4 w-px bg-hairline" />
             )}
           </div>
         )}
-        {justSaved ? (
+        {showSaved ? (
           <span className="flex items-center gap-1.5 whitespace-nowrap px-2.5 text-[12px] font-medium text-foreground">
             <Check className="size-3.5 shrink-0 text-[oklch(0.55_0.13_165)]" strokeWidth={2.5} />
             {resolvedSavedLabel}
@@ -117,7 +118,7 @@ export function SaveCard({
             <span className="nums">{unsavedLabel}</span>
           </span>
         ) : null}
-        {!justSaved && dirty && (
+        {!showSaved && dirty && (
           <Button
             size="sm"
             variant="ghost"
