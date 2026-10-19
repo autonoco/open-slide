@@ -30,6 +30,16 @@ import { round2 } from '@/lib/utils';
 import { hasHostedEditor, hasWorkerEditor, switchHostedEditor } from '../../lib/hosted-editor';
 import { AssetPickerDialog } from './asset-picker-dialog';
 import { ImageCropDialog, type ImageCropRect } from './image-crop-dialog';
+import {
+  type AssetAttrOp,
+  type Bucket,
+  completeAsset,
+  completeStyle,
+  createBucket,
+  type Sequenced,
+  type StyleOp,
+  snapshotBuckets,
+} from './pending-edits';
 
 export type SelectedTarget = {
   line: number;
@@ -124,44 +134,6 @@ export type InlineEditTarget = SelectedTarget & {
 
 export type InlineTextSelection = { start: number; end: number };
 type InlineStyleHandler = (ops: EditOp[]) => boolean;
-
-type AssetAttrOp = { assetPath: string; previewUrl: string };
-type Sequenced<T> = T & { seq: number };
-type StyleOp = { value: string | null; prevText?: string };
-
-type Bucket = {
-  line: number;
-  column: number;
-  styleOps: Map<string, Sequenced<StyleOp>>;
-  // Text edits are scoped per DOM instance: a reused component renders
-  // the same JSX `<h2>{title}</h2>` at multiple call sites with the same
-  // `data-slide-loc`, but each call site's prop literal is independent.
-  // Style/attr ops stay shared because they edit the JSX definition.
-  textEdits: Map<string, TextEditStep[]>;
-  textTargets: Map<string, SelectedTarget & { pageIndex: number }>;
-  attrOps: Map<string, Sequenced<AssetAttrOp>>;
-  // Pre-edit snapshot of the DOM, captured the first time we touch
-  // each style key / text / attribute. Used by `cancelEdits` to revert.
-  origStyle: Map<string, string>;
-  origTexts: Map<string /* instanceId */, { value: string }>;
-  origHtmls: Map<string /* instanceId */, TextDomSnapshot>;
-  origAttrs: Map<string, string | null>;
-};
-
-function createBucket(line: number, column: number): Bucket {
-  return {
-    line,
-    column,
-    styleOps: new Map(),
-    textEdits: new Map(),
-    textTargets: new Map(),
-    attrOps: new Map(),
-    origStyle: new Map(),
-    origTexts: new Map(),
-    origHtmls: new Map(),
-    origAttrs: new Map(),
-  };
-}
 
 // Retain the saved preview until a fresh published bundle replaces this document.
 const savedPreviews = new Map<string, Map<string, Bucket>>();
@@ -988,10 +960,7 @@ export function InspectorProvider({
             column,
             ops: [{ kind: 'set-style', key: k, value: op.value, prevText: op.prevText }],
           },
-          onSuccess: (b) => {
-            b.styleOps.delete(k);
-            b.origStyle.delete(k);
-          },
+          onSuccess: (b) => completeStyle(b, k, op),
         });
       }
       for (const [attr, op] of attrOps) {
@@ -1010,10 +979,7 @@ export function InspectorProvider({
               },
             ],
           },
-          onSuccess: (b) => {
-            b.attrOps.delete(attr);
-            b.origAttrs.delete(attr);
-          },
+          onSuccess: (b) => completeAsset(b, attr, op),
         });
       }
       for (const [instanceId, steps] of textEdits) {
@@ -1056,11 +1022,12 @@ export function InspectorProvider({
       history.clear();
       return;
     }
+    const committedBuckets = snapshotBuckets(buckets);
     setCommitting(true);
     try {
       const results = await applyEdits(pending.map((p) => p.edit));
       if (hasWorkerEditor && results.length === pending.length && results.every((r) => r.ok)) {
-        for (const [key, bucket] of buckets) retainPreview(slideId, key, bucket);
+        for (const [key, bucket] of committedBuckets) retainPreview(slideId, key, bucket);
       }
       const failures: string[] = [];
       for (let i = 0; i < results.length; i++) {
