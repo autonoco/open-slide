@@ -41,64 +41,58 @@ test.describe('published Worker editor', () => {
     if (preview) await stopServer(preview);
   });
 
-  test('saves through the Worker API and reloads the completed publication', async ({ page }) => {
+  test('saves twice without waiting for publication or reloading the editor', async ({ page }) => {
     test.setTimeout(120_000);
     const errors: string[] = [];
     page.on('pageerror', (error) => errors.push(error.message));
-    let saved = '';
+    let saved = await readSlideSource('edit-target', project);
+    let revision = 0;
+    let finishPublication: () => void = () => {};
+    const publication = new Promise<void>((resolve) => {
+      finishPublication = resolve;
+    });
     await page.route('**/__host/files?*', async (route) => {
       if (route.request().method() === 'GET') {
-        await route.fulfill({
-          json: {
-            content: await readSlideSource('edit-target', project),
-            revision: 'a'.repeat(40),
-          },
-        });
+        await route.fulfill({ json: { content: saved, revision: String(revision) } });
         return;
       }
-      expect(route.request().headers()['if-match']).toBe(`"${'a'.repeat(40)}"`);
+      expect(route.request().headers()['if-match']).toBe(`"${revision}"`);
       saved = route.request().postData() ?? '';
-      await fs.writeFile(path.join(project, 'slides/edit-target/index.tsx'), saved);
-      const result = await runCli(['build'], project);
-      expect(result.code, result.stderr).toBe(0);
-      await route.fulfill({ json: { saved: true, changed: true, revision: 'b'.repeat(40) } });
+      revision++;
+      await route.fulfill({ json: { saved: true, changed: true, revision: String(revision) } });
     });
-    await page.route('**/__host/publication/*', (route) =>
-      route.fulfill({
+    await page.route('**/__host/publication/*', async (route) => {
+      await publication;
+      await route.fulfill({
         contentType: 'application/x-ndjson',
         body: '{"type":"workflow_completed"}\n',
-      }),
-    );
+      });
+    });
     await page.goto(`${baseUrl}/s/edit-target?edit=1`);
-    const headline = page
-      .locator('main[data-inspector-root]')
-      .getByText('Editable headline', { exact: true });
+    const headline = page.locator('main[data-inspector-root] h1');
     await expect(headline).toBeVisible({ timeout: 30_000 });
-    await expect(headline).toHaveAttribute('data-slide-loc', /\d+:\d+/);
+    let navigations = 0;
+    page.on('framenavigated', (frame) => {
+      if (frame === page.mainFrame()) navigations++;
+    });
     await headline.click();
-    await page
-      .locator('aside[data-inspector-ui]')
-      .getByPlaceholder('Element text')
-      .fill('Editable headline from Worker');
-    await page
-      .locator('aside[data-inspector-ui]')
-      .getByRole('button', { name: 'Italic', exact: true })
-      .click();
-    const published = page.waitForResponse((response) =>
-      response.url().includes('/__host/publication/'),
-    );
-    const navigated = page.waitForEvent('framenavigated', (frame) => frame === page.mainFrame());
+    const input = page.locator('aside[data-inspector-ui]').getByPlaceholder('Element text');
+    await input.fill('First saved heading');
     await page.getByRole('button', { name: 'Save', exact: true }).click();
-    await published;
-    await navigated;
-    expect(saved).toContain('Editable headline from Worker');
-    await expect(
-      page
-        .locator('main[data-inspector-root]')
-        .getByText('Editable headline from Worker', { exact: true }),
-    ).toBeVisible({ timeout: 30_000 });
-    await expect(page.locator('main[data-inspector-root] h1')).toHaveCSS('font-style', 'italic');
-    expect(saved).toContain('fontStyle');
+    await expect(page.getByText('Saved. Publishing update…')).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Saving', exact: true })).toHaveCount(0);
+    await input.fill('Second saved heading');
+    await page.getByRole('button', { name: 'Save', exact: true }).click();
+    await expect.poll(() => revision).toBe(2);
+    expect(saved).toContain('Second saved heading');
+    await expect(page.getByRole('button', { name: 'Saving', exact: true })).toHaveCount(0);
+    await input.fill('Unsaved next edit');
+    finishPublication();
+    await expect(page.getByText('Saved. Publishing finished.')).toBeVisible();
+    await expect(headline).toHaveText('Unsaved next edit');
+    expect(navigations).toBe(0);
+    await page.getByRole('button', { name: 'Discard', exact: true }).click();
+    await expect(headline).toHaveText('Second saved heading');
     expect(errors).toEqual([]);
   });
 
